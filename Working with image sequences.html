@@ -2,7 +2,7 @@
 <html lang="english">
 <head>
         <meta charset="utf-8" />
-        <title>David Molony - intro</title>
+        <title>Tensorflow image sequences</title>
         <link rel="stylesheet" href="/theme/css/main.css" />
 
         <!--[if IE]>
@@ -17,10 +17,15 @@
                     <li class="active"><a href="/category/intro.html">intro</a></li>
                 </ul></nav>
         </header><!-- /#banner -->
+<section id="content" class="body">
+  <article>
+    <header>
+      <h1 class="entry-title">
+        <a href="/Working with image sequences.html" rel="bookmark"
+           title="Permalink to Tensorflow image sequences">Tensorflow image sequences</a></h1>
+    </header>
 
-            <aside id="featured" class="body">
-                <article>
-                    <h1 class="entry-title"><a href="/Working with image sequences.html">Tensorflow image sequences</a></h1>
+    <div class="entry-content">
 <footer class="post-info">
         <abbr class="published" title="2018-08-01T18:41:00-04:00">
                 Published: Wed 01 August 2018
@@ -35,7 +40,7 @@
         </address>
 <p>In <a href="/category/intro.html">intro</a>.</p>
 <p>tags: <a href="/tag/image-sequences.html">image sequences</a> <a href="/tag/tfrecords.html">tfrecords</a> <a href="/tag/dataset-api.html">dataset API</a> </p>
-</footer><!-- /.post-info --><h1>Background</h1>
+</footer><!-- /.post-info -->      <h1>Background</h1>
 <p>This post will try to serve as a practical guide on how to import a sequence of images into tensorflow using the Dataset API. If you're not familiar with the Dataset API you should check out the tensorflow guide https://www.tensorflow.org/programmers_guide/datasets. The beauty of the dataset API is that it allows us to import a datasource and use functions that apply image decoding, augmentation and batching all within the tensorflow environment. In this tutorial I will import a publicly available video datasource into tensorflow by first formatting and generating a TFRecords file and then reading this TFRecords file into tensorflow. This tutorial is designed for users with an intermediate level of familiarity with tensorflow</p>
 <h2>Working with images</h2>
 <p>A problem I've found using the Dataset API is that is does not play friendly with importing sequences of images. A search of StackOverflow shows others with the same issue. Often the easiest way to read images into tensorflow using the dataset API is through reading a text file where the image path is stored and generating a list of the filenames. Then we can generate a Dataset from tensor slices.</p>
@@ -402,40 +407,11 @@ Displaying frames [100, 105, 110, 115, 120]
 2. How to use the tensorflow Dataset API to read a batch of image sequences</p>
 <h3>Further reading</h3>
 <p>https://medium.com/mostly-ai/tensorflow-records-what-they-are-and-how-to-use-them-c46bc4bbb564</p>
-<p>www.wildml.com/2016/08/rnns-in-tensorflow-a-practical-guide-and-undocumented-features/</p>                </article>
-            </aside><!-- /#featured -->
-                <section id="content" class="body">
-                    <h1>Other articles</h1>
-                    <hr />
-                    <ol id="posts-list" class="hfeed">
+<p>www.wildml.com/2016/08/rnns-in-tensorflow-a-practical-guide-and-undocumented-features/</p>
+    </div><!-- /.entry-content -->
 
-            <li><article class="hentry">
-                <header>
-                    <h1><a href="/Introduction.html" rel="bookmark"
-                           title="Permalink to My first post">My first post</a></h1>
-                </header>
-
-                <div class="entry-content">
-<footer class="post-info">
-        <abbr class="published" title="2018-07-09T10:01:00-04:00">
-                Published: Mon 09 July 2018
-        </abbr>
-		<br />
-        <abbr class="modified" title="2018-07-09T12:30:00-04:00">
-                Updated: Mon 09 July 2018
-        </abbr>
-
-        <address class="vcard author">
-                By                         <a class="url fn" href="/author/david-molony.html">David Molony</a>
-        </address>
-<p>In <a href="/category/intro.html">intro</a>.</p>
-<p>tags: <a href="/tag/intro.html">intro</a> </p>
-</footer><!-- /.post-info -->                <p>Introduction to the blog.</p>
-                <a class="readmore" href="/Introduction.html">read more</a>
-                </div><!-- /.entry-content -->
-            </article></li>
-                </ol><!-- /#posts-list -->
-                </section><!-- /#content -->
+  </article>
+</section>
         <section id="extras" class="body">
                 <div class="blogroll">
                         <h2>links</h2>

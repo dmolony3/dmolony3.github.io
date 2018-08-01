@@ -20,7 +20,402 @@
 
             <aside id="featured" class="body">
                 <article>
-                    <h1 class="entry-title"><a href="/Introduction.html">My first post</a></h1>
+                    <h1 class="entry-title"><a href="/Working with image sequences.html">Tensorflow image sequences</a></h1>
+<footer class="post-info">
+        <abbr class="published" title="2018-08-01T18:41:00-04:00">
+                Published: Wed 01 August 2018
+        </abbr>
+		<br />
+        <abbr class="modified" title="2018-08-01T18:41:00-04:00">
+                Updated: Wed 01 August 2018
+        </abbr>
+
+        <address class="vcard author">
+                By                         <a class="url fn" href="/author/david-molony.html">David Molony</a>
+        </address>
+<p>In <a href="/category/intro.html">intro</a>.</p>
+<p>tags: <a href="/tag/image-sequences.html">image sequences</a> <a href="/tag/tfrecords.html">tfrecords</a> <a href="/tag/dataset-api.html">dataset API</a> </p>
+</footer><!-- /.post-info --><h1>Background</h1>
+<p>This post will try to serve as a practical guide on how to import a sequence of images into tensorflow using the Dataset API. If you're not familiar with the Dataset API you should check out the tensorflow guide https://www.tensorflow.org/programmers_guide/datasets. The beauty of the dataset API is that it allows us to import a datasource and use functions that apply image decoding, augmentation and batching all within the tensorflow environment. In this tutorial I will import a publicly available video datasource into tensorflow by first formatting and generating a TFRecords file and then reading this TFRecords file into tensorflow. This tutorial is designed for users with an intermediate level of familiarity with tensorflow</p>
+<h2>Working with images</h2>
+<p>A problem I've found using the Dataset API is that is does not play friendly with importing sequences of images. A search of StackOverflow shows others with the same issue. Often the easiest way to read images into tensorflow using the dataset API is through reading a text file where the image path is stored and generating a list of the filenames. Then we can generate a Dataset from tensor slices.</p>
+<div class="highlight"><pre><span></span><span class="n">image_list</span><span class="p">,</span> <span class="n">label_list</span> <span class="o">=</span> <span class="n">read_files</span><span class="p">(</span><span class="n">data_file</span><span class="p">)</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">Data</span><span class="o">.</span><span class="n">Dataset_from_tensor_slices</span><span class="p">((</span><span class="n">image_list</span><span class="p">,</span> <span class="n">label_list</span><span class="p">))</span>
+<span class="n">data_batch</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">batch</span><span class="p">(</span><span class="n">batch_size</span><span class="p">)</span>
+</pre></div>
+
+
+<p>However, this will load one image at a time which we could batch to generate a 4D tensor but things start to get messy this way if we want to create a mini-batch from different video sources.  To create a mini-batch of a sequence of images we essentially need a 5D tensor (batch, time, height, width, depth) as illustrated in the below figure. The easiest way to contruct this tensor is true TFRecords and I will show how this can be done.</p>
+<p><img alt="title" src="sequence_example.png"></p>
+<h2>Getting started</h2>
+<p>First we will identify a data source that requires us to work with sequences of images. UCF101 is an action recognition dataset of realistic action videos, collected from YouTube, having 101 action categories. With this dataset we might want to classify the action and incorporating several frames of the videos instead of a model that works on individual frames might boost our model accuracy.</p>
+<p>Let's start by downloading and extracting the dataset</p>
+<div class="highlight"><pre><span></span><span class="err">!</span><span class="n">wget</span> <span class="n">http</span><span class="p">:</span><span class="o">//</span><span class="n">crcv</span><span class="o">.</span><span class="n">ucf</span><span class="o">.</span><span class="n">edu</span><span class="o">/</span><span class="n">data</span><span class="o">/</span><span class="n">UCF50</span><span class="o">.</span><span class="n">rar</span>
+</pre></div>
+
+
+<div class="highlight"><pre><span></span><span class="err">!</span><span class="n">unrar</span> <span class="n">x</span> <span class="n">UCF50</span><span class="o">.</span><span class="n">rar</span>
+</pre></div>
+
+
+<p>Next we will import all the modules we need. Most of these are pretty common libraries but we also need to use cv2 in order to extract the frames from the avi video files. If running on linux you will need cv2&gt;3.3.0</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">operator</span>
+<span class="kn">import</span> <span class="nn">cv2</span>
+<span class="kn">import</span> <span class="nn">PIL.Image</span> <span class="kn">as</span> <span class="nn">im</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">tensorflow</span> <span class="kn">as</span> <span class="nn">tf</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">as</span> <span class="nn">plt</span>
+</pre></div>
+
+
+<h2>Extract frames</h2>
+<p>The UCF50 dataset contains .avi files for 50 actions. In order to use them for a machine learning algorithm we need to extract the frames. For each action there are multiple examples broken down into groups and clips. As we extract the frames we will write a text file for each video. This text file will contain the path of the extracted frames and the corresponding label for each action. We will use these files when generating our TFRecords file</p>
+<p>In order to achieve all this we're are going to use some helper functions that 
+1. Extract frames from each video and write the frames as image files to the same folder
+2. Create text files that contain the frame name for each frame we extract</p>
+<p>As the UCF50 dataset is extremely large we are just going to look at a small subset of it. We will extract the frames for every 10th action. If you want to work with the entire dataset just delete the below line dirs=dirs[::10] but be aware there are over a million frames in total.</p>
+<div class="highlight"><pre><span></span><span class="n">home_path</span> <span class="o">=</span> <span class="s1">&#39;UCF50/UCF50&#39;</span>
+<span class="n">dirs</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">home_path</span><span class="p">)</span>
+<span class="n">dirs</span> <span class="o">=</span> <span class="p">[</span><span class="n">directory</span> <span class="k">for</span> <span class="n">directory</span> <span class="ow">in</span> <span class="n">dirs</span> <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">home_path</span><span class="p">,</span> <span class="n">directory</span><span class="p">))]</span>
+
+<span class="c1"># keep every 10th class</span>
+<span class="n">dirs</span> <span class="o">=</span> <span class="n">dirs</span><span class="p">[</span><span class="mi">0</span><span class="p">::</span><span class="mi">10</span><span class="p">]</span>
+
+<span class="c1"># create a dictionary for each class label</span>
+<span class="n">frame_class</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">current_dir</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">dirs</span><span class="p">):</span>
+    <span class="n">files</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">home_path</span><span class="p">,</span> <span class="n">current_dir</span><span class="p">))</span>
+    <span class="n">files</span> <span class="o">=</span> <span class="p">[</span><span class="n">vid</span> <span class="k">for</span> <span class="n">vid</span> <span class="ow">in</span> <span class="n">files</span> <span class="k">if</span> <span class="s1">&#39;.avi&#39;</span> <span class="ow">in</span> <span class="n">vid</span><span class="p">]</span>
+
+    <span class="c1"># assign an integer value to represent each class</span>
+    <span class="n">frame_class</span><span class="p">[</span><span class="n">current_dir</span><span class="p">]</span> <span class="o">=</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span>
+
+    <span class="k">for</span> <span class="n">vid</span> <span class="ow">in</span> <span class="n">files</span><span class="p">:</span>
+        <span class="c1"># get video file</span>
+        <span class="n">video</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">VideoCapture</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">home_path</span><span class="p">,</span> <span class="n">current_dir</span><span class="p">,</span> <span class="n">vid</span><span class="p">))</span>
+
+        <span class="n">count</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">success</span> <span class="o">=</span> <span class="bp">False</span>
+        <span class="c1">#print(os.path.join(home_path, vid[2:].split(&#39;.avi&#39;)[0])+ &#39;.txt&#39;)</span>
+        <span class="n">f</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">home_path</span><span class="p">,</span> <span class="n">vid</span><span class="p">[</span><span class="mi">2</span><span class="p">:]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.avi&#39;</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span> <span class="o">+</span> <span class="s1">&#39;.txt&#39;</span><span class="p">,</span> <span class="s1">&#39;a&#39;</span><span class="p">)</span>
+
+        <span class="k">while</span> <span class="n">success</span><span class="p">:</span>
+            <span class="c1"># write every 5th frame to disk</span>
+            <span class="k">if</span> <span class="n">count</span> <span class="o">%</span> <span class="mi">5</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="c1"># read the video</span>
+                <span class="n">success</span><span class="p">,</span> <span class="n">image</span> <span class="o">=</span> <span class="n">video</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+                <span class="c1"># define the output filename</span>
+                <span class="n">out_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">home_path</span><span class="p">,</span> <span class="n">current_dir</span><span class="p">,</span> <span class="n">vid</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.avi&#39;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="s2">&quot;_frame</span><span class="si">%d</span><span class="s2">.jpg&quot;</span> <span class="o">%</span> <span class="n">count</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">success</span><span class="p">:</span>
+                    <span class="c1"># write frame as JPEG file</span>
+                    <span class="n">cv2</span><span class="o">.</span><span class="n">imwrite</span><span class="p">(</span><span class="n">out_path</span><span class="p">,</span> <span class="n">image</span><span class="p">)</span>     
+                    <span class="c1"># write text file with frame path and frame class</span>
+                    <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">current_dir</span><span class="p">,</span> <span class="n">vid</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.avi&#39;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="s2">&quot;_frame</span><span class="si">%d</span><span class="s2">.jpg </span><span class="si">%d</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">)))</span>
+
+                <span class="k">if</span> <span class="n">cv2</span><span class="o">.</span><span class="n">waitKey</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span> <span class="o">==</span> <span class="mi">27</span><span class="p">:</span>                     <span class="c1"># exit if Escape is hit</span>
+                    <span class="n">f</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+                    <span class="k">break</span>
+            <span class="n">count</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="n">f</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</pre></div>
+
+
+<h3>What are TFRecords?</h3>
+<p>Before I detail how the TFRecord file is generated I will give a brief explanation on TFRecords. TFRecords is a tensorflow standard format that stores your data as binary strings. TFRecords can either be tf.SequenceExample or tf.trainExample. For sequential data we use tf.SequenceExample.  One thing to watch with TFRecords is that the filesize gets extremely large. I won't go into the details of tf.SequenceExample as Denny Britz (linked at the end of this article) has a great introduction on how to use tf.SequenceExample. The main thing that you will notice is that each sequence example contains a context and a feature_lists. The context contains non-sequential information about the sequence, while the feature_lists contains the sequence data e.g. words, images, stock prices. For instance for our sequence of images some context information could be the image height and width as well as the sequence length</p>
+<h3>Generate_tfrecord</h3>
+<p>Now that we know what the TFRecord file is we will generate it using the function generate_tfrecord. We have a text file for each video so we can make batches of image sequences. To make things easier we are going to truncate the total number of images in a batch to the shortest number. That is to say if in our mini-batch of 4 sequences the videos contain 150, 160, 170 and 180 frames we will truncate all sequences to 150 frames. Alternatively, we could use padding in cases where we have a greater number of images in one batch. The first helper function make_file_list reads all the text files and sorts each file/video by the number of frames so that we are never discarding a lot of frames. We have several other helper function for reading the images, decoding the images and converting the images to bytes.</p>
+<p>The function generate_tfrecord does all the work. We start by calling <strong>tf.python_io.TFRecordWriter</strong> which is a class to write records to TFRecords file. We will write each sequence example to this object. Before we get to defining the <strong>tf.train.SequenceExample</strong> we will read in batch_size number of videos and add these to a list <em>full_batch_image_list</em>. Based on our prior determined sequence length we then read and convert images into a list of bytes using our helper function <strong>image_sequence</strong>. We similarly read the labels from the text file and convert this to the appropriate TFRecords format. Following this we create our context features and bundle these into a dictionary. Similary our sequence data is bundled into a dictionary <em>sequence_dict</em>. The variables <em>sequence_context</em> and <em>sequence_list</em> use <strong>tf.train.Features</strong> and <strong>tf.train.FeatureLists</strong> for the context and the squence data respectively. Finally our sequence example is generated using <strong>tf.train.SequenceExample</strong> which we then write. This is performed individually for each mini-sequence of our batch_size samples before we move onto writing the next mini-sequence of the same batch</p>
+<div class="highlight"><pre><span></span><span class="c1"># read filenames into list</span>
+<span class="k">def</span> <span class="nf">make_file_list</span><span class="p">(</span><span class="n">directory</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;this function makes a list of sorted text files sorted by the sequence length&quot;&quot;&quot;</span>
+    <span class="n">files</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span>
+    <span class="n">files</span> <span class="o">=</span> <span class="p">[</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">files</span> <span class="k">if</span> <span class="s1">&#39;.txt&#39;</span> <span class="ow">in</span> <span class="n">name</span><span class="p">]</span>
+    <span class="n">file_dict</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">for</span> <span class="nb">file</span> <span class="ow">in</span> <span class="n">files</span><span class="p">:</span>
+        <span class="n">f</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="nb">file</span><span class="p">),</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span>
+        <span class="n">num_files</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span><span class="o">.</span><span class="n">splitlines</span><span class="p">())</span>
+        <span class="n">file_dict</span><span class="p">[</span><span class="nb">file</span><span class="p">]</span> <span class="o">=</span> <span class="n">num_files</span>
+        <span class="n">f</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+    <span class="n">sorted_file</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">file_dict</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span> <span class="n">key</span><span class="o">=</span><span class="n">operator</span><span class="o">.</span><span class="n">itemgetter</span><span class="p">(</span><span class="mi">1</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">sorted_file</span>
+
+<span class="k">def</span> <span class="nf">read_files</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="nb">file</span><span class="p">):</span>
+    <span class="n">f</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="nb">file</span><span class="p">),</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span>
+    <span class="n">data</span><span class="o">=</span><span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span><span class="o">.</span><span class="n">splitlines</span><span class="p">()</span>
+    <span class="n">f</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+    <span class="n">image_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">name</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39; &#39;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">data</span><span class="p">]</span>
+    <span class="n">label_list</span> <span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">name</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39; &#39;</span><span class="p">)[</span><span class="mi">1</span><span class="p">])</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">data</span><span class="p">]</span> <span class="c1">## FIX THIS BY CHANGING TO ONE SPACE </span>
+
+    <span class="k">return</span> <span class="n">image_list</span><span class="p">,</span> <span class="n">label_list</span>
+
+<span class="k">def</span> <span class="nf">decode_images</span><span class="p">(</span><span class="n">image</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;this function reads an image and converts it to a numpy array&quot;&quot;&quot;</span>
+    <span class="n">image</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">im</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">image</span><span class="o">.</span><span class="n">strip</span><span class="p">(</span><span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="p">)))</span>
+
+    <span class="k">return</span> <span class="n">image</span>
+
+<span class="c1"># create a image sequence where each entry is an image of bytes</span>
+<span class="k">def</span> <span class="nf">image_sequence</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="n">image_list</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;this function takes a list of images and returns the list in bytes&quot;&quot;&quot;</span>
+    <span class="n">image_bytes_list</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">image</span> <span class="ow">in</span> <span class="n">image_list</span><span class="p">:</span>
+        <span class="n">image</span> <span class="o">=</span> <span class="n">decode_images</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="n">image</span><span class="p">))</span>
+        <span class="n">image_bytes</span> <span class="o">=</span> <span class="n">image</span><span class="o">.</span><span class="n">tostring</span><span class="p">()</span>
+        <span class="n">image_bytes</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">Feature</span><span class="p">(</span><span class="n">bytes_list</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">BytesList</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="p">[</span><span class="n">image_bytes</span><span class="p">]))</span>
+        <span class="n">image_bytes_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">image_bytes</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">image_bytes_list</span>
+
+<span class="k">def</span> <span class="nf">label_sequence</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="n">label_list</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;this function takes a list of labels and returns the list in int64&quot;&quot;&quot;</span>
+    <span class="n">label_int_list</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">label_list</span><span class="p">:</span>
+        <span class="n">label_int</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">Feature</span><span class="p">(</span><span class="n">int64_list</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">Int64List</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="p">[</span><span class="n">label</span><span class="p">]))</span>
+        <span class="n">label_int_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">label_int</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">label_int_list</span>
+
+<span class="k">def</span> <span class="nf">generate_tfrecord</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="n">file_list</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">,</span> <span class="n">sequence_length</span><span class="p">,</span> <span class="n">imsize</span><span class="p">,</span> <span class="n">train_or_test</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;file_list is a list of images directories sorted by nymber of images</span>
+<span class="sd">    sequence_length is the length of the sequence</span>
+<span class="sd">    train_or_test is a string prefix for the output file</span>
+<span class="sd">    batch_size indicates the batch size</span>
+<span class="sd">    imsize is a list that indicates the shape [nx, ny, ch]&quot;&quot;&quot;</span>
+    <span class="n">writer</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">python_io</span><span class="o">.</span><span class="n">TFRecordWriter</span><span class="p">(</span><span class="n">train_or_test</span> <span class="o">+</span> <span class="s1">&#39;.tfrecord&#39;</span><span class="p">)</span>
+
+    <span class="n">image_height</span> <span class="o">=</span> <span class="n">imsize</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">image_width</span> <span class="o">=</span> <span class="n">imsize</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">image_depth</span> <span class="o">=</span> <span class="n">imsize</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">file_list</span><span class="p">),</span> <span class="n">batch_size</span><span class="p">):</span>
+        <span class="c1"># read files</span>
+        <span class="n">j</span> <span class="o">=</span> <span class="n">i</span>
+        <span class="n">num_files</span> <span class="o">=</span> <span class="mf">1e6</span>
+        <span class="n">full_batch_image_list</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">full_batch_label_list</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">while</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">i</span> <span class="o">+</span> <span class="n">batch_size</span><span class="p">:</span>
+            <span class="c1"># get maximum number of files in each dataset</span>
+            <span class="n">num_files</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">num_files</span><span class="p">,</span> <span class="n">file_list</span><span class="p">[</span><span class="n">j</span><span class="p">][</span><span class="mi">1</span><span class="p">])</span>
+            <span class="n">image_list</span><span class="p">,</span> <span class="n">label_list</span> <span class="o">=</span> <span class="n">read_files</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="n">file_list</span><span class="p">[</span><span class="n">j</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span>
+            <span class="n">j</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="n">full_batch_image_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">image_list</span><span class="p">)</span>
+            <span class="n">full_batch_label_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">label_list</span><span class="p">)</span>
+
+        <span class="c1"># iterate over batch lists and remove files greater than the max num_files</span>
+        <span class="n">full_batch_image_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">batch</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="n">num_files</span><span class="p">]</span> <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">full_batch_image_list</span><span class="p">]</span>
+        <span class="n">full_batch_label_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">batch</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="n">num_files</span><span class="p">]</span> <span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">full_batch_label_list</span><span class="p">]</span>
+
+        <span class="c1"># iterate over sequence length and add each batch so format is case1-t1, case1-t2, caes1-t3, case2-t1, case2-t2, caset-t3</span>
+        <span class="n">timesteps</span> <span class="o">=</span> <span class="n">num_files</span><span class="o">//</span><span class="n">sequence_length</span>
+        <span class="n">current_timestep</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="c1"># TO HAVE LAST BATCH OF SIZE SEQUENCE LENGTH SET TO LESS THAN (&lt;)</span>
+        <span class="c1"># TO HAVE LAST BATCH OF SIZE (current_timestep % sequence_length) SET TO LESS THAN OR EQUAL TO (&lt;=)</span>
+        <span class="k">while</span> <span class="n">current_timestep</span> <span class="o">&lt;</span> <span class="n">timesteps</span><span class="o">*</span><span class="n">sequence_length</span><span class="p">:</span> 
+            <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">batch_size</span><span class="p">):</span>
+                <span class="n">image_bytes_list</span> <span class="o">=</span> <span class="n">image_sequence</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="n">full_batch_image_list</span><span class="p">[</span><span class="n">l</span><span class="p">][</span><span class="n">current_timestep</span><span class="p">:</span><span class="n">current_timestep</span><span class="o">+</span><span class="n">sequence_length</span><span class="p">])</span>       
+                <span class="n">label_int_list</span> <span class="o">=</span> <span class="n">label_sequence</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="n">full_batch_label_list</span><span class="p">[</span><span class="n">l</span><span class="p">][</span><span class="n">current_timestep</span><span class="p">:</span><span class="n">current_timestep</span><span class="o">+</span><span class="n">sequence_length</span><span class="p">])</span>
+
+                <span class="n">case</span> <span class="o">=</span> <span class="n">full_batch_image_list</span><span class="p">[</span><span class="n">l</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;v_&#39;</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;_frame&#39;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="c1"># after every batch write the images to the tfrecord</span>
+                <span class="c1"># create a feature list consisting of list of images</span>
+                <span class="n">images</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">FeatureList</span><span class="p">(</span><span class="n">feature</span><span class="o">=</span><span class="n">image_bytes_list</span><span class="p">)</span>
+                <span class="n">labels</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">FeatureList</span><span class="p">(</span><span class="n">feature</span><span class="o">=</span><span class="n">label_int_list</span><span class="p">)</span>
+
+                <span class="n">im_length</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">Feature</span><span class="p">(</span><span class="n">int64_list</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">Int64List</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">image_bytes_list</span><span class="p">)]))</span>
+                <span class="n">im_height</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">Feature</span><span class="p">(</span><span class="n">int64_list</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">Int64List</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="p">[</span><span class="n">image_height</span><span class="p">]))</span>
+                <span class="n">im_width</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">Feature</span><span class="p">(</span><span class="n">int64_list</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">Int64List</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="p">[</span><span class="n">image_width</span><span class="p">]))</span>
+                <span class="n">im_depth</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">Feature</span><span class="p">(</span><span class="n">int64_list</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">Int64List</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="p">[</span><span class="n">image_depth</span><span class="p">]))</span>
+                <span class="n">im_name</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">Feature</span><span class="p">(</span><span class="n">bytes_list</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">BytesList</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="p">[</span><span class="nb">str</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="n">case</span><span class="p">)]))</span>
+
+                <span class="n">a</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;_&#39;</span><span class="p">)[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;.jpg&#39;</span><span class="p">)[</span><span class="mi">0</span><span class="p">],</span> <span class="n">full_batch_image_list</span><span class="p">[</span><span class="n">l</span><span class="p">][</span><span class="n">current_timestep</span><span class="p">:</span><span class="n">current_timestep</span><span class="o">+</span><span class="n">sequence_length</span><span class="p">]))</span>
+                <span class="n">a</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">a</span><span class="p">)</span>
+                <span class="n">frames</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">Feature</span><span class="p">(</span><span class="n">bytes_list</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">BytesList</span><span class="p">(</span><span class="n">value</span> <span class="o">=</span><span class="p">[</span><span class="nb">str</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="n">a</span><span class="p">)]))</span>
+
+                <span class="c1"># create a dictionary</span>
+                <span class="n">sequence_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;Images&#39;</span><span class="p">:</span> <span class="n">images</span><span class="p">,</span> <span class="s1">&#39;Labels&#39;</span><span class="p">:</span> <span class="n">labels</span><span class="p">}</span>
+                <span class="n">context_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;length&#39;</span><span class="p">:</span> <span class="n">im_length</span><span class="p">,</span> <span class="s1">&#39;height&#39;</span><span class="p">:</span> <span class="n">im_height</span><span class="p">,</span> <span class="s1">&#39;width&#39;</span><span class="p">:</span> <span class="n">im_width</span><span class="p">,</span> <span class="s1">&#39;depth&#39;</span><span class="p">:</span> <span class="n">im_depth</span><span class="p">,</span> <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="n">im_name</span><span class="p">,</span> <span class="s1">&#39;frames&#39;</span><span class="p">:</span> <span class="n">frames</span><span class="p">}</span>
+
+                <span class="n">sequence_context</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">Features</span><span class="p">(</span><span class="n">feature</span><span class="o">=</span><span class="n">context_dict</span><span class="p">)</span>
+                <span class="c1"># now create a list of feature lists contained within dictionary</span>
+                <span class="n">sequence_list</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">FeatureLists</span><span class="p">(</span><span class="n">feature_list</span><span class="o">=</span><span class="n">sequence_dict</span><span class="p">)</span>
+
+                <span class="n">example</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">SequenceExample</span><span class="p">(</span><span class="n">context</span><span class="o">=</span><span class="n">sequence_context</span><span class="p">,</span> <span class="n">feature_lists</span><span class="o">=</span><span class="n">sequence_list</span><span class="p">)</span>
+
+                <span class="n">writer</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">example</span><span class="o">.</span><span class="n">SerializeToString</span><span class="p">())</span>
+
+            <span class="c1"># increment the timestep</span>
+            <span class="n">current_timestep</span> <span class="o">+=</span> <span class="n">sequence_length</span>
+    <span class="n">writer</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</pre></div>
+
+
+<p>Now that we have defined how we are going to create the TFRecords file, let's set the image height, width and depth as well as specifying the batch size and sequence length. The batch size and sequence length are extremely important as when we read the TFRecords file we will need to read it using the same batch size and sequence length. For this example we will use a batch size of 4 and a sequence length of 5. You can see that the outputted TFRecords file size is very large at 30GB. </p>
+<div class="highlight"><pre><span></span><span class="c1"># read in data files and divide into sequence</span>
+<span class="n">image_height</span> <span class="o">=</span> <span class="mi">240</span>
+<span class="n">image_width</span> <span class="o">=</span> <span class="mi">320</span>
+<span class="n">image_depth</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="n">batch_size</span> <span class="o">=</span> <span class="mi">4</span>
+<span class="n">sequence_length</span> <span class="o">=</span> <span class="mi">5</span>
+<span class="n">sorted_files</span> <span class="o">=</span> <span class="n">make_file_list</span><span class="p">(</span><span class="n">home_path</span><span class="p">)</span>
+<span class="n">generate_tfrecord</span><span class="p">(</span><span class="n">home_path</span><span class="p">,</span> <span class="n">sorted_files</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">,</span> <span class="n">sequence_length</span><span class="p">,</span> <span class="p">[</span><span class="n">image_height</span><span class="p">,</span> <span class="n">image_width</span><span class="p">,</span> <span class="n">image_depth</span><span class="p">],</span> <span class="s1">&#39;train&#39;</span><span class="p">)</span>
+</pre></div>
+
+
+<h3>Reading the TFRecords</h3>
+<p>With the TFRecords file generated we need to create a function that will read the TFRecords file and decode it for tensorflow. For this purpose we will create a class DataSequenceReader. This class will use the tensorflow Dataset API for 
+1. Reading the data
+2. Applying functions to parse and augment the data
+3. Batching the data</p>
+<p>An instance of the class is initialized by specifying the batch size, sequence length and number of epochs. The function read_batch then reads the specified TFRecords file. Here I've included a simple function to rotate the sequence of images and you can see how any other augmentation technique could be employed.</p>
+<div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">DataSequenceReader</span><span class="p">():</span>
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">,</span> <span class="n">sequence_length</span><span class="p">,</span> <span class="n">num_epochs</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="n">batch_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_epochs</span> <span class="o">=</span> <span class="n">num_epochs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sequence_length</span> <span class="o">=</span> <span class="n">sequence_length</span>
+
+    <span class="k">def</span> <span class="nf">rotate_sequence</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">,</span> <span class="n">label</span><span class="p">,</span> <span class="n">im_name</span><span class="p">,</span> <span class="n">frames</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;apply the same rotation to data sequence&quot;&quot;&quot;</span>
+        <span class="n">rot_angle</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">random_uniform</span><span class="p">([],</span> <span class="n">minval</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">maxval</span><span class="o">=</span><span class="mi">360</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sequence_length</span><span class="p">):</span>
+            <span class="n">image</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">contrib</span><span class="o">.</span><span class="n">image</span><span class="o">.</span><span class="n">rotate</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">rot_angle</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">image</span><span class="p">,</span> <span class="n">label</span><span class="p">,</span> <span class="n">im_name</span><span class="p">,</span> <span class="n">frames</span>
+
+    <span class="k">def</span> <span class="nf">parse_sequence</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sequence_example</span><span class="p">):</span>
+
+        <span class="n">sequence_features</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;Images&#39;</span><span class="p">:</span> <span class="n">tf</span><span class="o">.</span><span class="n">FixedLenSequenceFeature</span><span class="p">([],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">string</span><span class="p">),</span>
+                          <span class="s1">&#39;Labels&#39;</span><span class="p">:</span> <span class="n">tf</span><span class="o">.</span><span class="n">FixedLenSequenceFeature</span><span class="p">([],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">int64</span><span class="p">)}</span>
+
+        <span class="n">context_features</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;length&#39;</span><span class="p">:</span> <span class="n">tf</span><span class="o">.</span><span class="n">FixedLenFeature</span><span class="p">([],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
+                         <span class="s1">&#39;height&#39;</span><span class="p">:</span> <span class="n">tf</span><span class="o">.</span><span class="n">FixedLenFeature</span><span class="p">([],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
+                         <span class="s1">&#39;width&#39;</span><span class="p">:</span> <span class="n">tf</span><span class="o">.</span><span class="n">FixedLenFeature</span><span class="p">([],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
+                         <span class="s1">&#39;depth&#39;</span><span class="p">:</span> <span class="n">tf</span><span class="o">.</span><span class="n">FixedLenFeature</span><span class="p">([],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
+                           <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="n">tf</span><span class="o">.</span><span class="n">FixedLenFeature</span><span class="p">([],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">string</span><span class="p">),</span>
+                            <span class="s1">&#39;frames&#39;</span><span class="p">:</span> <span class="n">tf</span><span class="o">.</span><span class="n">FixedLenFeature</span><span class="p">([],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">tf</span><span class="o">.</span><span class="n">string</span><span class="p">)}</span>
+        <span class="n">context</span><span class="p">,</span> <span class="n">sequence</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">parse_single_sequence_example</span><span class="p">(</span>
+            <span class="n">sequence_example</span><span class="p">,</span> <span class="n">context_features</span><span class="o">=</span><span class="n">context_features</span><span class="p">,</span> <span class="n">sequence_features</span><span class="o">=</span><span class="n">sequence_features</span><span class="p">)</span>
+
+        <span class="c1"># get features context</span>
+        <span class="n">seq_length</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">context</span><span class="p">[</span><span class="s1">&#39;length&#39;</span><span class="p">],</span> <span class="n">dtype</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+        <span class="n">im_height</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">context</span><span class="p">[</span><span class="s1">&#39;height&#39;</span><span class="p">],</span> <span class="n">dtype</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+        <span class="n">im_width</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">context</span><span class="p">[</span><span class="s1">&#39;width&#39;</span><span class="p">],</span> <span class="n">dtype</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+        <span class="n">im_depth</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">context</span><span class="p">[</span><span class="s1">&#39;depth&#39;</span><span class="p">],</span> <span class="n">dtype</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+        <span class="n">im_name</span> <span class="o">=</span> <span class="n">context</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span>
+        <span class="n">frames</span> <span class="o">=</span> <span class="n">context</span><span class="p">[</span><span class="s1">&#39;frames&#39;</span><span class="p">]</span>
+
+        <span class="c1"># encode image</span>
+        <span class="n">image</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">decode_raw</span><span class="p">(</span><span class="n">sequence</span><span class="p">[</span><span class="s1">&#39;Images&#39;</span><span class="p">],</span> <span class="n">tf</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+        <span class="n">image</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">seq_length</span><span class="p">,</span> <span class="n">im_height</span><span class="p">,</span> <span class="n">im_width</span><span class="p">,</span> <span class="n">im_depth</span><span class="p">))</span>
+
+        <span class="n">label</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">sequence</span><span class="p">[</span><span class="s1">&#39;Labels&#39;</span><span class="p">],</span> <span class="n">dtype</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">image</span><span class="p">,</span> <span class="n">label</span><span class="p">,</span> <span class="n">im_name</span><span class="p">,</span> <span class="n">frames</span>
+
+    <span class="k">def</span> <span class="nf">read_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">filename</span><span class="p">,</span> <span class="n">train</span><span class="p">):</span>
+        <span class="n">dataset</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">TFRecordDataset</span><span class="p">(</span><span class="n">filename</span><span class="p">)</span>
+        <span class="n">dataset</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">repeat</span><span class="p">()</span>
+        <span class="n">dataset</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">parse_sequence</span><span class="p">,</span> <span class="n">num_parallel_calls</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">train</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">dataset</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rotate_sequence</span><span class="p">,</span> <span class="n">num_parallel_calls</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">dataset</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">batch</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">dataset</span>
+</pre></div>
+
+
+<h3>Reading and displaying the image sequences</h3>
+<p>Now that we have a class that will read our TFRecords file and produce a batch of image sequences along with their corresponding labels we will read these images and display them in a tensorflow session. We will run 5 steps of 5 frames each and you can observe the frames below. So, to recap we have a batch size of 4 and a sequence length of 5. Each displayed row is a sample of 5 successive images. After displaying the initial batch of size 4 we display the next batch of 4. This batch will be the next 5 frames for each of our samples. Hopefully this isn't too confusing but the images below will illustrate this process. This continues until we reach the next video in the TFRecords file (remember we truncated the sequences to have the same length)</p>
+<div class="highlight"><pre><span></span><span class="c1"># make a dataset iterator</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">DataSequenceReader</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">sequence_length</span><span class="p">,</span> <span class="n">num_epochs</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+<span class="n">batch</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">read_batch</span><span class="p">(</span><span class="s1">&#39;train.tfrecord&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+<span class="n">iterator</span> <span class="o">=</span> <span class="n">batch</span><span class="o">.</span><span class="n">make_initializable_iterator</span><span class="p">()</span>
+
+<span class="n">next_element</span> <span class="o">=</span> <span class="n">iterator</span><span class="o">.</span><span class="n">get_next</span><span class="p">()</span>
+<span class="n">batch_iterator</span> <span class="o">=</span> <span class="n">iterator</span><span class="o">.</span><span class="n">initializer</span>
+<span class="k">with</span> <span class="n">tf</span><span class="o">.</span><span class="n">Session</span><span class="p">()</span> <span class="k">as</span> <span class="n">sess</span><span class="p">:</span>
+    <span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">iterator</span><span class="o">.</span><span class="n">initializer</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span>
+        <span class="n">images</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">frames</span> <span class="o">=</span> <span class="n">sess</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">next_element</span><span class="p">)</span>
+        <span class="n">frames</span> <span class="o">=</span> <span class="n">frames</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s1">&#39;frame&#39;</span><span class="p">)</span>
+        <span class="n">frames</span><span class="o">=</span> <span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">num</span><span class="p">)</span> <span class="k">for</span> <span class="n">num</span> <span class="ow">in</span> <span class="n">frames</span> <span class="k">if</span> <span class="n">num</span><span class="p">]</span>
+
+        <span class="n">fig</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">18</span><span class="p">,</span><span class="mi">15</span><span class="p">))</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">batch_size</span><span class="p">):</span>
+            <span class="k">print</span><span class="p">(</span><span class="s1">&#39;Displaying frames {}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">frames</span><span class="p">))</span>
+            <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">sequence_length</span><span class="p">):</span>
+                <span class="c1"># Display the frames along with the label by looking up the dictionary key</span>
+                <span class="n">ax</span> <span class="o">=</span> <span class="n">fig</span><span class="o">.</span><span class="n">add_subplot</span><span class="p">(</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">sequence_length</span><span class="p">,</span> <span class="n">idx</span><span class="p">)</span>
+                <span class="n">ax</span><span class="o">.</span><span class="n">imshow</span><span class="p">(</span><span class="n">images</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">,</span> <span class="p">:</span> <span class="p">,:</span> <span class="p">,:])</span>
+                <span class="n">title</span> <span class="o">=</span> <span class="s1">&#39;Class: {}&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">([</span><span class="n">key</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">frame_class</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">value</span> <span class="o">==</span> <span class="n">labels</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="n">j</span><span class="p">]][</span><span class="mi">0</span><span class="p">])</span>
+                <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="n">title</span><span class="p">)</span>
+                <span class="n">idx</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</pre></div>
+
+
+<div class="highlight"><pre><span></span>Displaying frames [0, 5, 10, 15, 20]
+Displaying frames [0, 5, 10, 15, 20]
+Displaying frames [0, 5, 10, 15, 20]
+Displaying frames [0, 5, 10, 15, 20]
+</pre></div>
+
+
+<p><img alt="png" src="ImageSequences_files/ImageSequences_18_1.png"></p>
+<div class="highlight"><pre><span></span>Displaying frames [25, 30, 35, 40, 45]
+Displaying frames [25, 30, 35, 40, 45]
+Displaying frames [25, 30, 35, 40, 45]
+Displaying frames [25, 30, 35, 40, 45]
+</pre></div>
+
+
+<p><img alt="png" src="ImageSequences_files/ImageSequences_18_3.png"></p>
+<div class="highlight"><pre><span></span>Displaying frames [50, 55, 60, 65, 70]
+Displaying frames [50, 55, 60, 65, 70]
+Displaying frames [50, 55, 60, 65, 70]
+Displaying frames [50, 55, 60, 65, 70]
+</pre></div>
+
+
+<p><img alt="png" src="ImageSequences_files/ImageSequences_18_5.png"></p>
+<div class="highlight"><pre><span></span>Displaying frames [75, 80, 85, 90, 95]
+Displaying frames [75, 80, 85, 90, 95]
+Displaying frames [75, 80, 85, 90, 95]
+Displaying frames [75, 80, 85, 90, 95]
+</pre></div>
+
+
+<p><img alt="png" src="ImageSequences_files/ImageSequences_18_7.png"></p>
+<div class="highlight"><pre><span></span>Displaying frames [100, 105, 110, 115, 120]
+Displaying frames [100, 105, 110, 115, 120]
+Displaying frames [100, 105, 110, 115, 120]
+Displaying frames [100, 105, 110, 115, 120]
+</pre></div>
+
+
+<p><img alt="png" src="ImageSequences_files/ImageSequences_18_9.png"></p>
+<p>And that's it! This formatting of the data will allow us to work with a batch of sequential images that we could use to train a recurrent neural network to learn some feature of the dataset. You can experiment yourself and change the sequence length but remember that you need to generate the TFRecords file again in order to work with the right batches. To recap the key things to take away are
+1. How to generate a TFRecords file using the tf.train.SequenceExample format where each entry is a sequence of images and labels
+2. How to use the tensorflow Dataset API to read a batch of image sequences</p>
+<h3>Further reading</h3>
+<p>https://medium.com/mostly-ai/tensorflow-records-what-they-are-and-how-to-use-them-c46bc4bbb564</p>
+<p>www.wildml.com/2016/08/rnns-in-tensorflow-a-practical-guide-and-undocumented-features/</p>                </article>
+            </aside><!-- /#featured -->
+                <section id="content" class="body">
+                    <h1>Other articles</h1>
+                    <hr />
+                    <ol id="posts-list" class="hfeed">
+
+            <li><article class="hentry">
+                <header>
+                    <h1><a href="/Introduction.html" rel="bookmark"
+                           title="Permalink to My first post">My first post</a></h1>
+                </header>
+
+                <div class="entry-content">
 <footer class="post-info">
         <abbr class="published" title="2018-07-09T10:01:00-04:00">
                 Published: Mon 09 July 2018
@@ -35,15 +430,12 @@
         </address>
 <p>In <a href="/category/intro.html">intro</a>.</p>
 <p>tags: <a href="/tag/intro.html">intro</a> </p>
-</footer><!-- /.post-info --><h1>Introduction</h1>
-<p>Welcome to my blog! I'm a postdoctoral fellow at Emory University 
-researching how hemodynamics influence the initiation and  progression of atherosclerosis. 
-My research journey has resulted in me finding myself at the intersection of 
-biomechanics, computer vision and data science.  </p>
-<p>Here I will be detailing my data science experiences and offering tips
- and solutions on working with Tensorflow. My first post will deal with 
- importing sequences of images into Tensorflow using the Dataset API. Stay tuned!</p>                </article>
-            </aside><!-- /#featured -->
+</footer><!-- /.post-info -->                <p>Introduction to the blog.</p>
+                <a class="readmore" href="/Introduction.html">read more</a>
+                </div><!-- /.entry-content -->
+            </article></li>
+                </ol><!-- /#posts-list -->
+                </section><!-- /#content -->
         <section id="extras" class="body">
                 <div class="blogroll">
                         <h2>links</h2>
@@ -58,8 +450,8 @@ biomechanics, computer vision and data science.  </p>
                         <h2>social</h2>
                         <ul>
 
-                            <li><a href="#">You can add links in your config file</a></li>
-                            <li><a href="#">Another social link</a></li>
+                            <li><a href="https://www.linkedin.com/in/david-molony-7457a219/">Linkedin</a></li>
+                            <li><a href="https://scholar.google.com/citations?user=jOp2LIMAAAAJ&hl=en">Google scholar</a></li>
                         </ul>
                 </div><!-- /.social -->
         </section><!-- /#extras -->
