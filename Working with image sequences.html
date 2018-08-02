@@ -14,7 +14,8 @@
         <header id="banner" class="body">
                 <h1><a href="/">David Molony </a></h1>
                 <nav><ul>
-                    <li class="active"><a href="/category/intro.html">intro</a></li>
+                    <li><a href="/category/intro.html">intro</a></li>
+                    <li class="active"><a href="/category/tensorflow.html">Tensorflow</a></li>
                 </ul></nav>
         </header><!-- /#banner -->
 <section id="content" class="body">
@@ -31,17 +32,17 @@
                 Published: Wed 01 August 2018
         </abbr>
 		<br />
-        <abbr class="modified" title="2018-08-01T18:41:00-04:00">
+        <abbr class="modified" title="2018-08-01T22:15:00-04:00">
                 Updated: Wed 01 August 2018
         </abbr>
 
         <address class="vcard author">
                 By                         <a class="url fn" href="/author/david-molony.html">David Molony</a>
         </address>
-<p>In <a href="/category/intro.html">intro</a>.</p>
+<p>In <a href="/category/tensorflow.html">Tensorflow</a>.</p>
 <p>tags: <a href="/tag/image-sequences.html">image sequences</a> <a href="/tag/tfrecords.html">tfrecords</a> <a href="/tag/dataset-api.html">dataset API</a> </p>
 </footer><!-- /.post-info -->      <h1>Background</h1>
-<p>This post will try to serve as a practical guide on how to import a sequence of images into tensorflow using the Dataset API. If you're not familiar with the Dataset API you should check out the tensorflow guide https://www.tensorflow.org/programmers_guide/datasets. The beauty of the dataset API is that it allows us to import a datasource and use functions that apply image decoding, augmentation and batching all within the tensorflow environment. In this tutorial I will import a publicly available video datasource into tensorflow by first formatting and generating a TFRecords file and then reading this TFRecords file into tensorflow. This tutorial is designed for users with an intermediate level of familiarity with tensorflow</p>
+<p>This post will try to serve as a practical guide on how to import a sequence of images into tensorflow using the Dataset API. If you're not familiar with the Dataset API you should check out the <a href="https://www.tensorflow.org/programmers_guide/datasets">tensorflow dataset guide</a>. The beauty of the dataset API is that it allows us to import a datasource and use functions that apply image decoding, augmentation and batching all within the tensorflow environment. In this tutorial I will import a publicly available video datasource into tensorflow by first formatting and generating a TFRecords file and then reading this TFRecords file into tensorflow. This tutorial is designed for users with an intermediate level of familiarity with tensorflow</p>
 <h2>Working with images</h2>
 <p>A problem I've found using the Dataset API is that is does not play friendly with importing sequences of images. A search of StackOverflow shows others with the same issue. Often the easiest way to read images into tensorflow using the dataset API is through reading a text file where the image path is stored and generating a list of the filenames. Then we can generate a Dataset from tensor slices.</p>
 <div class="highlight"><pre><span></span><span class="n">image_list</span><span class="p">,</span> <span class="n">label_list</span> <span class="o">=</span> <span class="n">read_files</span><span class="p">(</span><span class="n">data_file</span><span class="p">)</span>
@@ -76,11 +77,11 @@
 
 <h2>Extract frames</h2>
 <p>The UCF50 dataset contains .avi files for 50 actions. In order to use them for a machine learning algorithm we need to extract the frames. For each action there are multiple examples broken down into groups and clips. As we extract the frames we will write a text file for each video. This text file will contain the path of the extracted frames and the corresponding label for each action. We will use these files when generating our TFRecords file</p>
-<p>In order to achieve all this we're are going to use some helper functions that 
-1. Extract frames from each video and write the frames as image files to the same folder
+<p>In order to achieve all this we're are going to use some helper functions that<br>
+1. Extract frames from each video and write the frames as image files to the same folder<br>
 2. Create text files that contain the frame name for each frame we extract</p>
 <p>As the UCF50 dataset is extremely large we are just going to look at a small subset of it. We will extract the frames for every 10th action. If you want to work with the entire dataset just delete the below line dirs=dirs[::10] but be aware there are over a million frames in total.</p>
-<div class="highlight"><pre><span></span><span class="n">home_path</span> <span class="o">=</span> <span class="s1">&#39;UCF50/UCF50&#39;</span>
+<div class="highlight"><pre><span></span><span class="n">home_path</span> <span class="o">=</span> <span class="s1">&#39;UCF50&#39;</span>
 <span class="n">dirs</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">home_path</span><span class="p">)</span>
 <span class="n">dirs</span> <span class="o">=</span> <span class="p">[</span><span class="n">directory</span> <span class="k">for</span> <span class="n">directory</span> <span class="ow">in</span> <span class="n">dirs</span> <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">home_path</span><span class="p">,</span> <span class="n">directory</span><span class="p">))]</span>
 
@@ -269,9 +270,9 @@
 
 
 <h3>Reading the TFRecords</h3>
-<p>With the TFRecords file generated we need to create a function that will read the TFRecords file and decode it for tensorflow. For this purpose we will create a class DataSequenceReader. This class will use the tensorflow Dataset API for 
-1. Reading the data
-2. Applying functions to parse and augment the data
+<p>With the TFRecords file generated we need to create a function that will read the TFRecords file and decode it for tensorflow. For this purpose we will create a class DataSequenceReader. This class will use the tensorflow Dataset API for<br>
+1. Reading the data<br>
+2. Applying functions to parse and augment the data<br>
 3. Batching the data</p>
 <p>An instance of the class is initialized by specifying the batch size, sequence length and number of epochs. The function read_batch then reads the specified TFRecords file. Here I've included a simple function to rotate the sequence of images and you can see how any other augmentation technique could be employed.</p>
 <div class="highlight"><pre><span></span><span class="k">class</span> <span class="nc">DataSequenceReader</span><span class="p">():</span>
@@ -402,12 +403,14 @@ Displaying frames [100, 105, 110, 115, 120]
 
 
 <p><img alt="png" src="ImageSequences_files/ImageSequences_18_9.png"></p>
-<p>And that's it! This formatting of the data will allow us to work with a batch of sequential images that we could use to train a recurrent neural network to learn some feature of the dataset. You can experiment yourself and change the sequence length but remember that you need to generate the TFRecords file again in order to work with the right batches. To recap the key things to take away are
-1. How to generate a TFRecords file using the tf.train.SequenceExample format where each entry is a sequence of images and labels
-2. How to use the tensorflow Dataset API to read a batch of image sequences</p>
+<p>And that's it! This formatting of the data will allow us to work with a batch of sequential images that we could use to train a recurrent neural network to learn some feature of the dataset. You can experiment yourself and change the sequence length but remember that you need to generate the TFRecords file again in order to work with the right batches. To recap the key things to take away are</p>
+<ol>
+<li>How to generate a TFRecords file using the tf.train.SequenceExample format where each entry is a sequence of images and labels  </li>
+<li>How to use the tensorflow Dataset API to read a batch of image sequences</li>
+</ol>
 <h3>Further reading</h3>
-<p>https://medium.com/mostly-ai/tensorflow-records-what-they-are-and-how-to-use-them-c46bc4bbb564</p>
-<p>www.wildml.com/2016/08/rnns-in-tensorflow-a-practical-guide-and-undocumented-features/</p>
+<p>https://medium.com/mostly-ai/tensorflow-records-what-they-are-and-how-to-use-them-c46bc4bbb564<br>
+www.wildml.com/2016/08/rnns-in-tensorflow-a-practical-guide-and-undocumented-features/</p>
     </div><!-- /.entry-content -->
 
   </article>
