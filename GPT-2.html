@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <!-- Required meta tags -->
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+  <title>  Fine-tuning GPT-2 on cardiology textbooks | David Molony
+</title>
+  <link rel="canonical" href="/GPT-2.html">
+
+
+  <link rel="stylesheet" href="/theme/css/bootstrap.min.css">
+  <link rel="stylesheet" href="/theme/css/font-awesome.min.css">
+  <link rel="stylesheet" href="/theme/css/pygments/emacs.min.css">
+  <link rel="stylesheet" href="/theme/css/theme.css">
+
+  
+  <meta name="description" content="Fine-tuning GPT-2">
+
+
+</head>
+
+<body>
+  <header class="header">
+    <div class="container">
+<div class="row">
+    <div class="col-sm-4">
+      <a href="/">
+        <img class="img-fluid rounded" src=/images/burma.jpg alt="David Molony">
+      </a>
+    </div>
+  <div class="col-sm-8">
+    <h1 class="title"><a href="/">David Molony</a></h1>
+      <p class="text-muted">Machine Learning, Biomechanics, Medical Imaging</p>
+      <ul class="list-inline">
+          <li class="list-inline-item"><a href="https://scholar.google.com/citations?user=jOp2LIMAAAAJ&hl=en" target="_blank">Google scholar</a></li>
+          <li class="list-inline-item"><a href="pdfs/CV_2020_long.pdf" target="_blank">CV</a></li>
+              <li class="list-inline-item text-muted">|</li>
+            <li class="list-inline-item"><a href="/pages/About.html">About</a></li>
+            <li class=" list-inline-item text-muted">|</li>
+          <li class="list-inline-item"><a class="fa fa-linkedin" href="https://www.linkedin.com/in/david-molony-7457a219/" target="_blank"></a></li>
+          <li class="list-inline-item"><a class="fa fa-github" href="https://github.com/dmolony3" target="_blank"></a></li>
+          <li class="list-inline-item"><a class="fa fa-Google scholar" href="https://scholar.google.com/citations?user=jOp2LIMAAAAJ&hl=en" target="_blank"></a></li>
+      </ul>
+  </div>
+</div>    </div>
+  </header>
+
+  <div class="main">
+    <div class="container">
+      <h1>  Fine-tuning GPT-2 on cardiology textbooks
+</h1>
+      <hr>
+  <article class="article">
+    <header>
+      <ul class="list-inline">
+        <li class="list-inline-item text-muted" title="2020-02-17T10:10:00-05:00">
+          <i class="fa fa-clock-o"></i>
+          Mon 17 February 2020
+        </li>
+        <li class="list-inline-item">
+          <i class="fa fa-folder-open-o"></i>
+          <a href="/category/nlp.html">NLP</a>
+        </li>
+          <li class="list-inline-item">
+            <i class="fa fa-files-o"></i>
+              <a href="/tag/gpt-2.html">#GPT-2</a>          </li>
+      </ul>
+    </header>
+    <div class="content">
+      <p>With this post I'm going to share my experiences on fine-tuning <a href="https://openai.com/blog/better-language-models/">GPT-2</a> to autocomplete cardiology sentences. This post will focus on the experiments I ran and the quality of the generated text. If you just want to play around with the model, you can check it out <a href="http://cardioassistai.com">here</a>. In a follow-up post I will share some of the more technical details in deploying the model.</p>
+<h2>GPT-2</h2>
+<p>For those that don't live in the AI world GPT-2 (Generative Pre-training 2) is a deep learning model from <a href="https://openai.com/">OpenAI</a> that can be used to generate text. It achieves this by learning to predict the next word in given the precedings words from a large corpus of text. OpenAI trained GPT-2 on a massive dataset of 40GB of general text from the internet. They trained models with 117M (small), 345M (medium), 762M (large) and 1542M (extra-large) parameters. They (eventually) made these models publicly available and <a href="https://transformer.huggingface.co/doc/gpt2-large">Huggingface</a> developed a web app where you can play around with it. If you do try and get it to generate text from the domain of cardiology you will see it just doesn't work. This is not surprising as it has never been trained on 'technical' content that you expect to see in text about cardiology. However, the great thing about this model is that we can build on the general language knowledge it has already learned. This is done by fine-tuning the model on a new dataset for a desired purpose e.g. autocomplete cardiology sentences.</p>
+<h2>Dataset</h2>
+<p>In order to fine-tune GPT-2 we first need a dataset. Finding large amounts of text in a specialized domain proved to be quite tricky. In the end I settled for textbooks over journal articles as I assumed the text would be more general. After downloading the ebooks (14 in total) I stripped the text from them and did some basic cleaning such as removal of citation numbers. I then split the dataset into train and validation datasets which were 9.5MB and 1MB respectively. As a reminder OpenAI pretrained this model on a dataset that was <strong>4000</strong> times bigger! </p>
+<h2>Model</h2>
+<p>As mentioned there are 4 different sized GPT-2 models. The large and extra-large models require a lot of compute power to train and the small cardiology dataset possibly does not benefit from the extra parameterization. For this reason I focused on fine-tuning the small and medium models. I used the awesome Huggingface <a href="https://github.com/huggingface/transformers">transformers</a> library for this. For the experiments I looked at 2 different cases - the first which used the original vocabulary for GPT-2 and the second where I expanded the original vocabulary by adding the 150 most common words in the cardiology corpus that did not already appear in the original vocabulary. As an example of these here were the 10 most common - <em>stent, catheter, myocardial, aortic, ventricular, distal, stenosis, lesion, revascularization and stents</em>.</p>
+<h2>Pre-trained Model Results</h2>
+<p>How does the original GPT-2 do on generating sensible cardiology text? In all these experiments I provide some context and you can see the generated text from the model in bold.</p>
+<p><em>Generated text for pretrained medium model</em> </p>
+<blockquote class="blockquote">
+<p>A Fractional Flow Reserve of &lt;0.8%<b> of the total volume of the total volume of</b><br/>
+The PROSPECT trial found<b> that the use of the drug was associated with a</b><br/>
+FAME II was a landmark trial<b> that brought the case to the Supreme Court. The case</b><br/>
+Common risk factors for CAD are<b>: 1. A history of cardiovascular disease</b><br/>
+Plaque burden as measured by IVUS<b>.
+The study was approved by the Inst</b><br/>
+Thin capped fibroatheroma<b> (FBC) is a rare, but very</b><br/>
+The most accurate diagnostic test for CAD is<b> the T-test, which is a simple,</b><br/>
+After stent deployment<b>, the team has been able to deploy the new</b><br/>
+A stenosis &gt;50% <b> of the time.
+The most common sten</b><br/>
+Angioplasty was first performed by <b>Dr. Robert J. H. Haldane</b> </p>
+</blockquote>
+<p>You don't have to be a cardiologist to know that these sentences are not sensible. It makes simple mistakes such as associating the word trial to judicial matters as opposed to clinical. I'm also not sure I would want my coronary artery disease (CAD) diagnosed by the T-test. Next, we'll see how fine-tuning the model impacts the generated text for the same context.</p>
+<h2>Fine-tuned Model Results</h2>
+<p>Here I will present the results from fine-tuning the small and medium models using both the original vocabulary and the extended vocabulary.</p>
+<h3>Small model</h3>
+<p>This model was fine-tuned with a batch size of 2 and a learning rate of 5e-5. We can check against overfitting to the training dataset by tracking the validation dataset loss. Around the 11th epoch the validation dataset loss starts to increase again and we can assume it is starting to overfit to the training dataset. This happens for both the original and extended vocab models. But, how does the generated text look?</p>
+<p><em>Generated text for small model with original vocabulary</em> </p>
+<blockquote class="blockquote">
+<p>A Fractional Flow Reserve of &lt;0.8<b>, a single-stent restenosis with</b><br/>
+The PROSPECT trial found<b> a mean of the clinical events in the study of</b><br/>
+FAME II was a landmark trial that<b> were randomized to the primary endpoint of death, MI</b><br/>
+Common risk factors for CAD are<b> not be considered for the most common risk of the</b><br/>
+Plaque burden as measured by IVUS<b> imaging, and IVUS imaging has been shown to</b><br/>
+Thin capped fibroatheroma<b> (CAD) is a significant differences in patients</b><br/>
+The most accurate diagnostic test for CAD is<b> the use of the use of the use of the</b><br/>
+After stent deployment<b> is a stent deployment, a stent deployment</b><br/>
+A stenosis &gt;50% <b> of patients with aneurysms are associated with</b><br/>
+Angioplasty was first performed by <b>the first-generation stent (CAD)</b></p>
+</blockquote>
+<p><em>Generated text for small model with extended vocabulary</em> </p>
+<blockquote class="blockquote">
+<p>A Fractional Flow Reserve of &lt;0.8%<b> in the primary PCI in the primary PCI group</b><br/>
+The PROSPECT trial found<b> the use of the use of the use of the</b><br/>
+FAME II was a landmark trial that<b> the safety of the safety of the safety of the</b><br/>
+Common risk factors for CAD are<b> the most common cause of the patient is the patient</b><br/>
+Plaque burden as measured by IVUS<b> is a thin fibrous cap fibroatheroma.</b><br/>
+Thin capped fibroatheroma<b> (C) was a significant difference in the use</b><br/>
+The most accurate diagnostic test for CAD is<b> the presence of the presence of a significant stenosis in</b><br/>
+After stent deployment<b> of stents are used to the stents is</b><br/>
+A stenosis &gt;50%<b> stenosis is a significant stenosis is a significant stenosis of</b><br/>
+Angioplasty was first performed by <b>the main vessel vessel (PCI) in the</b> </p>
+</blockquote>
+<p>The first thing to notice is that the text does now appear to be from the domain of cardiology so perhaps some examples could fool those unfamiliar with the field. However, text is also repeated which is a known <a href="https://github.com/huggingface/transformers/issues/666">issue</a> with language models when always selecting the most likely next word. Moreover, we can see that there really is very little understanding as most of the generated text does not make sense given the context. For example following the word stent with the acronym CAD. Finally, we can see that the model with the extended vocabulary appears to perform poorer and is quite incoherent. </p>
+<h3>Medium model</h3>
+<p>For the medium model the batch size was reduced to 1 in order to fit in GPU memory, while the same learning rate was used. The model starts to overfit after only 7 epochs. I'm not sure whether this is due to the increased capacity of the medium model or the reduction in the batch size. Let's take a look at the generated text again given the same context.</p>
+<p><em>Generated text for medium model with original vocabulary</em> </p>
+<blockquote class="blockquote">
+<p>A Fractional Flow Reserve of &lt;0.8<b> Has Unparalleled Effect on Left Main Stenosis. A recent study by</b><br/>
+The PROSPECT trial found<b> that the combination of routine angiography and PCI with drug-eluting</b><br/>
+FAME II was a landmark trial that<b> demonstrated the superiority of PCI versus CABG in patients with multivessel</b><br/>
+Common risk factors for CAD are<b> summarized in Table 5-1. The prevalence of hypertension, diabetes, and</b><br/>
+Plaque burden as measured by IVUS<b> is a surrogate marker for the presence of atherosclerotic plaque and is</b><br/>
+Thin capped fibroatheroma<b> (TCFA) is a rare, but potentially devastating, complication of coronary</b><br/>
+The most accurate diagnostic test for CAD is<b> the coronary angiogram. The angiogram is a two-dimensional</b><br/>
+After stent deployment<b>, the stent should be removed from the delivery sheath and the guid</b><br/>
+A stenosis &gt;50% <b> in diameter is considered significant and should be treated. If the stenosis is</b><br/>
+Angioplasty was first performed by <b>Gruntzig in 1929 and his technique was subsequently modified by Braunwald and</b> </p>
+</blockquote>
+<p><em>Generated text for medium model with extended vocabulary</em> </p>
+<blockquote class="blockquote">
+<p>A Fractional Flow Reserve of &lt;0.8<b> Undergoing PCI is associated with a significant reduction in</b><br/>
+The PROSPECT trial found<b> that the use of a DES in the setting of</b><br/>
+FAME II was a landmark trial that<b> randomized patients with STEMI to PCI or CABG. The</b><br/>
+Common risk factors for CAD are<b> summarized in Table 4.1. The risk of</b><br/>
+Plaque burden as measured by IVUS<b> is a useful tool to assess the severity of coronary</b><br/>
+Thin capped fibroatheroma<b> (TCFA) is a rare, but potentially</b><br/>
+The most accurate diagnostic test for CAD is<b> the coronary angiography. It is a simple and inexpensive</b><br/>
+After stent deployment<b>, the patient is monitored for the duration of the</b><br/>
+A stenosis &gt;50% <b>is defined as a vessel with a diameter &lt;2</b><br/>
+Angioplasty was first performed by <b>Andreas Grüntzig in 1929. He was</b> </p>
+</blockquote>
+<p>As you can see the generated text is substantially better than that for the small model. It still errs on factual information such as saying that Grüntzig (though this part is correct) performed the first angioplasty in 1929. However, most of the generated text is very plausible. The model manages to generate the correct acronym for thin capped fibroatheroma (TCFA) and generates sensible text about plaque burden. We can also see the model is clearly not a physiologist as it believes that a stenosis &gt;50% is significant.</p>
+<h2>Summary</h2>
+<p>These results highlight the difficulty in generating coherent and sensible text in a specialized domain using AI. The small model produced poor results, however the medium sized model produced mostly sensible text which was often factually incorrect. Extending the vocabulary appears to have little impact on the generated text. It is important to remember that we should not expect super intelligent models that are only trained on text. <em>How would a human do at understanding cardiology if they only had access to words in a textbook and could not look at the corresponding images?</em> An interesting avenue of research is combining text and images so that the model can learn a better understanding of the "world". </p>
+<p>Finally, it is important to remember this is far from the limits of what is achievable with current models. <em>With a much larger dataset and larger model I'm very confident high quality text can be generated.</em> Further improvements may also be possible with a better decoding strategy but I did not explore this. Please give the model a go by visiting <a href="http://cardioassistai.com">cardioassistai.com</a> and share your generated text on Twitter!</p>
+    </div>
+  </article>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div class="container">
+<div class="row">
+  <ul class="col-sm-6 list-inline">
+    <li class="list-inline-item"><a href="/archives.html">Archives</a></li>
+    <li class="list-inline-item"><a href="/categories.html">Categories</a></li>
+      <li class="list-inline-item"><a href="/tags.html">Tags</a></li>
+  </ul>
+  <p class="col-sm-6 text-sm-right text-muted">
+    Generated by <a href="https://github.com/getpelican/pelican" target="_blank">Pelican</a>
+    / <a href="https://github.com/nairobilug/pelican-alchemy" target="_blank">&#x2728;</a>
+  </p>
+</div>    </div>
+  </footer>
+</body>
+
+</html>
