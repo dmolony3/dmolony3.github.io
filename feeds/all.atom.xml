@@ -1,5 +1,92 @@
 <?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"><title>David Molony</title><link href="https://dmolony3.github.io/" rel="alternate"></link><link href="https://dmolony3.github.io/feeds/all.atom.xml" rel="self"></link><id>https://dmolony3.github.io/</id><updated>2018-08-01T22:15:00-04:00</updated><entry><title>Tensorflow image sequences</title><link href="https://dmolony3.github.io/Working%20with%20image%20sequences.html" rel="alternate"></link><published>2018-08-01T18:41:00-04:00</published><updated>2018-08-01T22:15:00-04:00</updated><author><name>David Molony</name></author><id>tag:dmolony3.github.io,2018-08-01:/Working with image sequences.html</id><summary type="html">&lt;p&gt;Tutorial on reading image sequences for tensorflow.&lt;/p&gt;</summary><content type="html">&lt;h1&gt;Background&lt;/h1&gt;
+<feed xmlns="http://www.w3.org/2005/Atom"><title>David Molony</title><link href="https://dmolony3.github.io/" rel="alternate"></link><link href="https://dmolony3.github.io/feeds/all.atom.xml" rel="self"></link><id>https://dmolony3.github.io/</id><updated>2020-02-17T10:10:00-05:00</updated><subtitle>Machine Learning, Biomechanics, Medical Imaging</subtitle><entry><title>Fine-tuning GPT-2 on cardiology textbooks</title><link href="https://dmolony3.github.io/GPT-2.html" rel="alternate"></link><published>2020-02-17T10:10:00-05:00</published><updated>2020-02-17T10:10:00-05:00</updated><author><name>David Molony</name></author><id>tag:dmolony3.github.io,2020-02-17:/GPT-2.html</id><summary type="html">&lt;p&gt;Summary and thoughts on experiments to fine-tune GPT-2 on a corpus of cardiology text&lt;/p&gt;</summary><content type="html">&lt;p&gt;With this post I'm going to share my experiences on fine-tuning &lt;a href="https://openai.com/blog/better-language-models/"&gt;GPT-2&lt;/a&gt; to autocomplete cardiology sentences. This post will focus on the experiments I ran and the quality of the generated text. If you just want to play around with the model, you can check it out &lt;a href="http://cardioassistai.com"&gt;here&lt;/a&gt;. In a follow-up post I will share some of the more technical details in deploying the model.&lt;/p&gt;
+&lt;h3&gt;GPT-2&lt;/h3&gt;
+&lt;p&gt;For those that don't live in the AI world GPT-2 (Generative Pre-training 2) is a deep learning model from &lt;a href="https://openai.com/"&gt;OpenAI&lt;/a&gt; that can be used to generate text. It achieves this by learning to predict the next word in given the precedings words from a large corpus of text. OpenAI trained GPT-2 on a massive dataset of 40GB of general text from the internet. They trained models with 117M (small), 345M (medium), 762M (large) and 1542M (extra-large) parameters. They (eventually) made these models publicly available and &lt;a href="https://transformer.huggingface.co/doc/gpt2-large"&gt;Huggingface&lt;/a&gt; developed a web app where you can play around with it. If you do try and get it to generate text from the domain of cardiology you will see it just doesn't work. This is not surprising as it has never been trained on 'technical' content that you expect to see in text about cardiology. However, the great thing about this model is that we can build on the general language knowledge it has already learned. This is done by fine-tuning the model on a new dataset for a desired purpose e.g. autocomplete cardiology sentences.&lt;/p&gt;
+&lt;h3&gt;Dataset&lt;/h3&gt;
+&lt;p&gt;In order to fine-tune GPT-2 we first need a dataset. Finding large amounts of text in a specialized domain proved to be quite tricky. In the end I settled for textbooks over journal articles as I assumed the text would be more general. After downloading the ebooks (14 in total) I stripped the text from them and did some basic cleaning such as removal of citation numbers. I then split the dataset into train and validation datasets which were 9.5MB and 1MB respectively. As a reminder OpenAI pretrained this model on a dataset that was &lt;strong&gt;4000&lt;/strong&gt; times bigger! &lt;/p&gt;
+&lt;h3&gt;Model&lt;/h3&gt;
+&lt;p&gt;As mentioned there are 4 different sized GPT-2 models. The large and extra-large models require a lot of compute power to train and the small cardiology dataset possibly does not benefit from the extra parameterization. For this reason I focused on fine-tuning the small and medium models. I used the awesome Huggingface &lt;a href="https://github.com/huggingface/transformers"&gt;transformers&lt;/a&gt; library for this. For the experiments I looked at 2 different cases - the first which used the original vocabulary for GPT-2 and the second where I expanded the original vocabulary by adding the 150 most common words in the cardiology corpus that did not already appear in the original vocabulary. As an example of these here were the 10 most common - &lt;em&gt;stent, catheter, myocardial, aortic, ventricular, distal, stenosis, lesion, revascularization and stents&lt;/em&gt;.&lt;/p&gt;
+&lt;h3&gt;Pre-trained Model Results&lt;/h3&gt;
+&lt;p&gt;How does the original GPT-2 do on generating sensible cardiology text? In all these experiments I provide some context and you can see the generated text from the model in bold.&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;Generated text for pretrained medium model&lt;/em&gt; &lt;/p&gt;
+&lt;blockquote class="blockquote"&gt;
+&lt;p&gt;A Fractional Flow Reserve of &amp;lt;0.8%&lt;b&gt; of the total volume of the total volume of&lt;/b&gt;&lt;br/&gt;
+The PROSPECT trial found&lt;b&gt; that the use of the drug was associated with a&lt;/b&gt;&lt;br/&gt;
+FAME II was a landmark trial&lt;b&gt; that brought the case to the Supreme Court. The case&lt;/b&gt;&lt;br/&gt;
+Common risk factors for CAD are&lt;b&gt;: 1. A history of cardiovascular disease&lt;/b&gt;&lt;br/&gt;
+Plaque burden as measured by IVUS&lt;b&gt;.
+The study was approved by the Inst&lt;/b&gt;&lt;br/&gt;
+Thin capped fibroatheroma&lt;b&gt; (FBC) is a rare, but very&lt;/b&gt;&lt;br/&gt;
+The most accurate diagnostic test for CAD is&lt;b&gt; the T-test, which is a simple,&lt;/b&gt;&lt;br/&gt;
+After stent deployment&lt;b&gt;, the team has been able to deploy the new&lt;/b&gt;&lt;br/&gt;
+A stenosis &amp;gt;50% &lt;b&gt; of the time.
+The most common sten&lt;/b&gt;&lt;br/&gt;
+Angioplasty was first performed by &lt;b&gt;Dr. Robert J. H. Haldane&lt;/b&gt; &lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;You don't have to be a cardiologist to know that these sentences are not sensible. It makes simple mistakes such as associating the word trial to judicial matters as opposed to clinical. I'm also not sure I would want my coronary artery disease (CAD) diagnosed by the T-test. Next, we'll see how fine-tuning the model impacts the generated text for the same context.&lt;/p&gt;
+&lt;h3&gt;Fine-tuned Model Results&lt;/h3&gt;
+&lt;p&gt;Here I will present the results from fine-tuning the small and medium models using both the original vocabulary and the extended vocabulary.&lt;/p&gt;
+&lt;h4&gt;Small model&lt;/h4&gt;
+&lt;p&gt;This model was fine-tuned with a batch size of 2 and a learning rate of 5e-5. We can check against overfitting to the training dataset by tracking the validation dataset loss. Around the 11th epoch the validation dataset loss starts to increase again and we can assume it is starting to overfit to the training dataset. This happens for both the original and extended vocab models. But, how does the generated text look?&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;Generated text for small model with original vocabulary&lt;/em&gt; &lt;/p&gt;
+&lt;blockquote class="blockquote"&gt;
+&lt;p&gt;A Fractional Flow Reserve of &amp;lt;0.8&lt;b&gt;, a single-stent restenosis with&lt;/b&gt;&lt;br/&gt;
+The PROSPECT trial found&lt;b&gt; a mean of the clinical events in the study of&lt;/b&gt;&lt;br/&gt;
+FAME II was a landmark trial that&lt;b&gt; were randomized to the primary endpoint of death, MI&lt;/b&gt;&lt;br/&gt;
+Common risk factors for CAD are&lt;b&gt; not be considered for the most common risk of the&lt;/b&gt;&lt;br/&gt;
+Plaque burden as measured by IVUS&lt;b&gt; imaging, and IVUS imaging has been shown to&lt;/b&gt;&lt;br/&gt;
+Thin capped fibroatheroma&lt;b&gt; (CAD) is a significant differences in patients&lt;/b&gt;&lt;br/&gt;
+The most accurate diagnostic test for CAD is&lt;b&gt; the use of the use of the use of the&lt;/b&gt;&lt;br/&gt;
+After stent deployment&lt;b&gt; is a stent deployment, a stent deployment&lt;/b&gt;&lt;br/&gt;
+A stenosis &amp;gt;50% &lt;b&gt; of patients with aneurysms are associated with&lt;/b&gt;&lt;br/&gt;
+Angioplasty was first performed by &lt;b&gt;the first-generation stent (CAD)&lt;/b&gt;&lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;&lt;em&gt;Generated text for small model with extended vocabulary&lt;/em&gt; &lt;/p&gt;
+&lt;blockquote class="blockquote"&gt;
+&lt;p&gt;A Fractional Flow Reserve of &amp;lt;0.8%&lt;b&gt; in the primary PCI in the primary PCI group&lt;/b&gt;&lt;br/&gt;
+The PROSPECT trial found&lt;b&gt; the use of the use of the use of the&lt;/b&gt;&lt;br/&gt;
+FAME II was a landmark trial that&lt;b&gt; the safety of the safety of the safety of the&lt;/b&gt;&lt;br/&gt;
+Common risk factors for CAD are&lt;b&gt; the most common cause of the patient is the patient&lt;/b&gt;&lt;br/&gt;
+Plaque burden as measured by IVUS&lt;b&gt; is a thin fibrous cap fibroatheroma.&lt;/b&gt;&lt;br/&gt;
+Thin capped fibroatheroma&lt;b&gt; (C) was a significant difference in the use&lt;/b&gt;&lt;br/&gt;
+The most accurate diagnostic test for CAD is&lt;b&gt; the presence of the presence of a significant stenosis in&lt;/b&gt;&lt;br/&gt;
+After stent deployment&lt;b&gt; of stents are used to the stents is&lt;/b&gt;&lt;br/&gt;
+A stenosis &amp;gt;50%&lt;b&gt; stenosis is a significant stenosis is a significant stenosis of&lt;/b&gt;&lt;br/&gt;
+Angioplasty was first performed by &lt;b&gt;the main vessel vessel (PCI) in the&lt;/b&gt; &lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;The first thing to notice is that the text does now appear to be from the domain of cardiology so perhaps some examples could fool those unfamiliar with the field. However, text is also repeated which is a known &lt;a href="https://github.com/huggingface/transformers/issues/666"&gt;issue&lt;/a&gt; with language models when always selecting the most likely next word. Moreover, we can see that there really is very little understanding as most of the generated text does not make sense given the context. For example following the word stent with the acronym CAD. Finally, we can see that the model with the extended vocabulary appears to perform poorer and is quite incoherent. &lt;/p&gt;
+&lt;h4&gt;Medium model&lt;/h4&gt;
+&lt;p&gt;For the medium model the batch size was reduced to 1 in order to fit in GPU memory, while the same learning rate was used. The model starts to overfit after only 7 epochs. I'm not sure whether this is due to the increased capacity of the medium model or the reduction in the batch size. Let's take a look at the generated text again given the same context.&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;Generated text for medium model with original vocabulary&lt;/em&gt; &lt;/p&gt;
+&lt;blockquote class="blockquote"&gt;
+&lt;p&gt;A Fractional Flow Reserve of &amp;lt;0.8&lt;b&gt; Has Unparalleled Effect on Left Main Stenosis. A recent study by&lt;/b&gt;&lt;br/&gt;
+The PROSPECT trial found&lt;b&gt; that the combination of routine angiography and PCI with drug-eluting&lt;/b&gt;&lt;br/&gt;
+FAME II was a landmark trial that&lt;b&gt; demonstrated the superiority of PCI versus CABG in patients with multivessel&lt;/b&gt;&lt;br/&gt;
+Common risk factors for CAD are&lt;b&gt; summarized in Table 5-1. The prevalence of hypertension, diabetes, and&lt;/b&gt;&lt;br/&gt;
+Plaque burden as measured by IVUS&lt;b&gt; is a surrogate marker for the presence of atherosclerotic plaque and is&lt;/b&gt;&lt;br/&gt;
+Thin capped fibroatheroma&lt;b&gt; (TCFA) is a rare, but potentially devastating, complication of coronary&lt;/b&gt;&lt;br/&gt;
+The most accurate diagnostic test for CAD is&lt;b&gt; the coronary angiogram. The angiogram is a two-dimensional&lt;/b&gt;&lt;br/&gt;
+After stent deployment&lt;b&gt;, the stent should be removed from the delivery sheath and the guid&lt;/b&gt;&lt;br/&gt;
+A stenosis &amp;gt;50% &lt;b&gt; in diameter is considered significant and should be treated. If the stenosis is&lt;/b&gt;&lt;br/&gt;
+Angioplasty was first performed by &lt;b&gt;Gruntzig in 1929 and his technique was subsequently modified by Braunwald and&lt;/b&gt; &lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;&lt;em&gt;Generated text for medium model with extended vocabulary&lt;/em&gt; &lt;/p&gt;
+&lt;blockquote class="blockquote"&gt;
+&lt;p&gt;A Fractional Flow Reserve of &amp;lt;0.8&lt;b&gt; Undergoing PCI is associated with a significant reduction in&lt;/b&gt;&lt;br/&gt;
+The PROSPECT trial found&lt;b&gt; that the use of a DES in the setting of&lt;/b&gt;&lt;br/&gt;
+FAME II was a landmark trial that&lt;b&gt; randomized patients with STEMI to PCI or CABG. The&lt;/b&gt;&lt;br/&gt;
+Common risk factors for CAD are&lt;b&gt; summarized in Table 4.1. The risk of&lt;/b&gt;&lt;br/&gt;
+Plaque burden as measured by IVUS&lt;b&gt; is a useful tool to assess the severity of coronary&lt;/b&gt;&lt;br/&gt;
+Thin capped fibroatheroma&lt;b&gt; (TCFA) is a rare, but potentially&lt;/b&gt;&lt;br/&gt;
+The most accurate diagnostic test for CAD is&lt;b&gt; the coronary angiography. It is a simple and inexpensive&lt;/b&gt;&lt;br/&gt;
+After stent deployment&lt;b&gt;, the patient is monitored for the duration of the&lt;/b&gt;&lt;br/&gt;
+A stenosis &amp;gt;50% &lt;b&gt;is defined as a vessel with a diameter &amp;lt;2&lt;/b&gt;&lt;br/&gt;
+Angioplasty was first performed by &lt;b&gt;Andreas Grüntzig in 1929. He was&lt;/b&gt; &lt;/p&gt;
+&lt;/blockquote&gt;
+&lt;p&gt;As you can see the generated text is substantially better than that for the small model. It still errs on factual information such as saying that Grüntzig (though this part is correct) performed the first angioplasty in 1929. However, most of the generated text is very plausible. The model manages to generate the correct acronym for thin capped fibroatheroma (TCFA) and generates sensible text about plaque burden. We can also see the model is clearly not a physiologist as it believes that a stenosis &amp;gt;50% is significant.&lt;/p&gt;
+&lt;h3&gt;Summary&lt;/h3&gt;
+&lt;p&gt;These results highlight the difficulty in generating coherent and sensible text in a specialized domain using AI. The small model produced poor results, however the medium sized model produced mostly sensible text which was often factually incorrect. Extending the vocabulary appears to have little impact on the generated text. It is important to remember that we should not expect super intelligent models that are only trained on text. &lt;em&gt;How would a human do at understanding cardiology if they only had access to words in a textbook and could not look at the corresponding images?&lt;/em&gt; An interesting avenue of research is combining text and images so that the model can learn a better understanding of the "world". &lt;/p&gt;
+&lt;p&gt;Finally, it is important to remember this is far from the limits of what is achievable with current models. &lt;em&gt;With a much larger dataset and larger model I'm very confident high quality text can be generated.&lt;/em&gt; Further improvements may also be possible with a better decoding strategy but I did not explore this. Please give the model a go by visiting &lt;a href="http://cardioassistai.com"&gt;cardioassistai.com&lt;/a&gt; and share your generated text on Twitter!&lt;/p&gt;</content><category term="NLP"></category><category term="GPT-2"></category></entry><entry><title>Tensorflow image sequences</title><link href="https://dmolony3.github.io/Working%20with%20image%20sequences.html" rel="alternate"></link><published>2018-08-01T18:41:00-04:00</published><updated>2018-08-01T22:15:00-04:00</updated><author><name>David Molony</name></author><id>tag:dmolony3.github.io,2018-08-01:/Working with image sequences.html</id><summary type="html">&lt;p&gt;Tutorial on reading image sequences for tensorflow.&lt;/p&gt;</summary><content type="html">&lt;h1&gt;Background&lt;/h1&gt;
 &lt;p&gt;This post will try to serve as a practical guide on how to import a sequence of images into tensorflow using the Dataset API. If you're not familiar with the Dataset API you should check out the &lt;a href="https://www.tensorflow.org/programmers_guide/datasets"&gt;tensorflow dataset guide&lt;/a&gt;. The beauty of the dataset API is that it allows us to import a datasource and use functions that apply image decoding, augmentation and batching all within the tensorflow environment. In this tutorial I will import a publicly available video datasource into tensorflow by first formatting and generating a TFRecords file and then reading this TFRecords file into tensorflow. This tutorial is designed for users with an intermediate level of familiarity with tensorflow&lt;/p&gt;
 &lt;h2&gt;Working with images&lt;/h2&gt;
 &lt;p&gt;A problem I've found using the Dataset API is that is does not play friendly with importing sequences of images. A search of StackOverflow shows others with the same issue. Often the easiest way to read images into tensorflow using the dataset API is through reading a text file where the image path is stored and generating a list of the filenames. Then we can generate a Dataset from tensor slices.&lt;/p&gt;
@@ -20,10 +107,10 @@
 &lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;os&lt;/span&gt;
 &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;operator&lt;/span&gt;
 &lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;cv2&lt;/span&gt;
-&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;PIL.Image&lt;/span&gt; &lt;span class="kn"&gt;as&lt;/span&gt; &lt;span class="nn"&gt;im&lt;/span&gt;
-&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;numpy&lt;/span&gt; &lt;span class="kn"&gt;as&lt;/span&gt; &lt;span class="nn"&gt;np&lt;/span&gt;
-&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;tensorflow&lt;/span&gt; &lt;span class="kn"&gt;as&lt;/span&gt; &lt;span class="nn"&gt;tf&lt;/span&gt;
-&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;matplotlib.pyplot&lt;/span&gt; &lt;span class="kn"&gt;as&lt;/span&gt; &lt;span class="nn"&gt;plt&lt;/span&gt;
+&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;PIL.Image&lt;/span&gt; &lt;span class="k"&gt;as&lt;/span&gt; &lt;span class="nn"&gt;im&lt;/span&gt;
+&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;numpy&lt;/span&gt; &lt;span class="k"&gt;as&lt;/span&gt; &lt;span class="nn"&gt;np&lt;/span&gt;
+&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;tensorflow&lt;/span&gt; &lt;span class="k"&gt;as&lt;/span&gt; &lt;span class="nn"&gt;tf&lt;/span&gt;
+&lt;span class="kn"&gt;import&lt;/span&gt; &lt;span class="nn"&gt;matplotlib.pyplot&lt;/span&gt; &lt;span class="k"&gt;as&lt;/span&gt; &lt;span class="nn"&gt;plt&lt;/span&gt;
 &lt;/pre&gt;&lt;/div&gt;
 &lt;h2&gt;Extract frames&lt;/h2&gt;
 &lt;p&gt;The UCF50 dataset contains .avi files for 50 actions. In order to use them for a machine learning algorithm we need to extract the frames. For each action there are multiple examples broken down into groups and clips. As we extract the frames we will write a text file for each video. This text file will contain the path of the extracted frames and the corresponding label for each action. We will use these files when generating our TFRecords file&lt;/p&gt;
@@ -52,7 +139,7 @@
         &lt;span class="n"&gt;video&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;cv2&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;VideoCapture&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;os&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;join&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;home_path&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;current_dir&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;vid&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
 
         &lt;span class="n"&gt;count&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;0&lt;/span&gt;
-        &lt;span class="n"&gt;success&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="bp"&gt;True&lt;/span&gt;
+        &lt;span class="n"&gt;success&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="kc"&gt;True&lt;/span&gt;
         &lt;span class="c1"&gt;#print(os.path.join(home_path, vid[2:].split('.avi')[0])+ '.txt')&lt;/span&gt;
         &lt;span class="n"&gt;f&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;open&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;os&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;join&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;home_path&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;vid&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="mi"&gt;2&lt;/span&gt;&lt;span class="p"&gt;:]&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;split&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'.avi'&lt;/span&gt;&lt;span class="p"&gt;)[&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt; &lt;span class="o"&gt;+&lt;/span&gt; &lt;span class="s1"&gt;'.txt'&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="s1"&gt;'a'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
 
@@ -87,17 +174,17 @@
     &lt;span class="n"&gt;files&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;name&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;files&lt;/span&gt; &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="s1"&gt;'.txt'&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
     &lt;span class="n"&gt;file_dict&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;{}&lt;/span&gt;
 
-    &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="nb"&gt;file&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;files&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
-        &lt;span class="n"&gt;f&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;open&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;os&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;join&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;directory&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nb"&gt;file&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="s1"&gt;'r'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+    &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;file&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;files&lt;/span&gt;&lt;span class="p"&gt;:&lt;/span&gt;
+        &lt;span class="n"&gt;f&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;open&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;os&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;join&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;directory&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="s1"&gt;'r'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
         &lt;span class="n"&gt;num_files&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;len&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;f&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;read&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;splitlines&lt;/span&gt;&lt;span class="p"&gt;())&lt;/span&gt;
-        &lt;span class="n"&gt;file_dict&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="nb"&gt;file&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;num_files&lt;/span&gt;
+        &lt;span class="n"&gt;file_dict&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;num_files&lt;/span&gt;
         &lt;span class="n"&gt;f&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;close&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
     &lt;span class="n"&gt;sorted_file&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;sorted&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;file_dict&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;items&lt;/span&gt;&lt;span class="p"&gt;(),&lt;/span&gt; &lt;span class="n"&gt;key&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;operator&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;itemgetter&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;1&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
 
     &lt;span class="k"&gt;return&lt;/span&gt; &lt;span class="n"&gt;sorted_file&lt;/span&gt;
 
-&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;read_files&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;directory&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nb"&gt;file&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-    &lt;span class="n"&gt;f&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;open&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;os&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;join&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;directory&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="nb"&gt;file&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="s1"&gt;'r'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
+&lt;span class="k"&gt;def&lt;/span&gt; &lt;span class="nf"&gt;read_files&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;directory&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
+    &lt;span class="n"&gt;f&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="nb"&gt;open&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;os&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;path&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;join&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;directory&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;file&lt;/span&gt;&lt;span class="p"&gt;),&lt;/span&gt; &lt;span class="s1"&gt;'r'&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
     &lt;span class="n"&gt;data&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="n"&gt;f&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;read&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;splitlines&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
     &lt;span class="n"&gt;f&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;close&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
     &lt;span class="n"&gt;image_list&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;name&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;split&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;' '&lt;/span&gt;&lt;span class="p"&gt;)[&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;name&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;data&lt;/span&gt;&lt;span class="p"&gt;]&lt;/span&gt;
@@ -293,44 +380,44 @@
         &lt;span class="n"&gt;fig&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;plt&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;figure&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;figsize&lt;/span&gt;&lt;span class="o"&gt;=&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;12&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt;&lt;span class="mi"&gt;10&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
         &lt;span class="n"&gt;idx&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;
         &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;i&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="nb"&gt;range&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;batch_size&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
-            &lt;span class="k"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'Displaying frames {}'&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;format&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;frames&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
+            &lt;span class="nb"&gt;print&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="s1"&gt;'Displaying frames &lt;/span&gt;&lt;span class="si"&gt;{}&lt;/span&gt;&lt;span class="s1"&gt;'&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;format&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;frames&lt;/span&gt;&lt;span class="p"&gt;))&lt;/span&gt;
             &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;j&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="nb"&gt;range&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;sequence_length&lt;/span&gt;&lt;span class="p"&gt;):&lt;/span&gt;
                 &lt;span class="c1"&gt;# Display the frames along with the label by looking up the dictionary key&lt;/span&gt;
                 &lt;span class="n"&gt;ax&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="n"&gt;fig&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;add_subplot&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;batch_size&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;sequence_length&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;idx&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
                 &lt;span class="n"&gt;ax&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;imshow&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;images&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;j&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="p"&gt;:&lt;/span&gt; &lt;span class="p"&gt;,:&lt;/span&gt; &lt;span class="p"&gt;,:])&lt;/span&gt;
-                &lt;span class="n"&gt;title&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s1"&gt;'Class: {}'&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;format&lt;/span&gt;&lt;span class="p"&gt;([&lt;/span&gt;&lt;span class="n"&gt;key&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;key&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;value&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;frame_class&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;items&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt; &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;value&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="n"&gt;labels&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;j&lt;/span&gt;&lt;span class="p"&gt;]][&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
+                &lt;span class="n"&gt;title&lt;/span&gt; &lt;span class="o"&gt;=&lt;/span&gt; &lt;span class="s1"&gt;'Class: &lt;/span&gt;&lt;span class="si"&gt;{}&lt;/span&gt;&lt;span class="s1"&gt;'&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;format&lt;/span&gt;&lt;span class="p"&gt;([&lt;/span&gt;&lt;span class="n"&gt;key&lt;/span&gt; &lt;span class="k"&gt;for&lt;/span&gt; &lt;span class="n"&gt;key&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;value&lt;/span&gt; &lt;span class="ow"&gt;in&lt;/span&gt; &lt;span class="n"&gt;frame_class&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;items&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt; &lt;span class="k"&gt;if&lt;/span&gt; &lt;span class="n"&gt;value&lt;/span&gt; &lt;span class="o"&gt;==&lt;/span&gt; &lt;span class="n"&gt;labels&lt;/span&gt;&lt;span class="p"&gt;[&lt;/span&gt;&lt;span class="n"&gt;i&lt;/span&gt;&lt;span class="p"&gt;,&lt;/span&gt; &lt;span class="n"&gt;j&lt;/span&gt;&lt;span class="p"&gt;]][&lt;/span&gt;&lt;span class="mi"&gt;0&lt;/span&gt;&lt;span class="p"&gt;])&lt;/span&gt;
                 &lt;span class="n"&gt;ax&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;set_title&lt;/span&gt;&lt;span class="p"&gt;(&lt;/span&gt;&lt;span class="n"&gt;title&lt;/span&gt;&lt;span class="p"&gt;)&lt;/span&gt;
                 &lt;span class="n"&gt;idx&lt;/span&gt; &lt;span class="o"&gt;+=&lt;/span&gt; &lt;span class="mi"&gt;1&lt;/span&gt;
         &lt;span class="n"&gt;plt&lt;/span&gt;&lt;span class="o"&gt;.&lt;/span&gt;&lt;span class="n"&gt;show&lt;/span&gt;&lt;span class="p"&gt;()&lt;/span&gt;
 &lt;/pre&gt;&lt;/div&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;Displaying frames [0, 5, 10, 15, 20]
-Displaying frames [0, 5, 10, 15, 20]
-Displaying frames [0, 5, 10, 15, 20]
-Displaying frames [0, 5, 10, 15, 20]
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="err"&gt;Displaying frames [0, 5, 10, 15, 20]&lt;/span&gt;
+&lt;span class="err"&gt;Displaying frames [0, 5, 10, 15, 20]&lt;/span&gt;
+&lt;span class="err"&gt;Displaying frames [0, 5, 10, 15, 20]&lt;/span&gt;
+&lt;span class="err"&gt;Displaying frames [0, 5, 10, 15, 20]&lt;/span&gt;
 &lt;/pre&gt;&lt;/div&gt;
 &lt;p&gt;&lt;img alt="png" class="img-fluid" src="ImageSequences_files/ImageSequences_18_1.png"/&gt;&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;Displaying frames [25, 30, 35, 40, 45]
-Displaying frames [25, 30, 35, 40, 45]
-Displaying frames [25, 30, 35, 40, 45]
-Displaying frames [25, 30, 35, 40, 45]
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="err"&gt;Displaying frames [25, 30, 35, 40, 45]&lt;/span&gt;
+&lt;span class="err"&gt;Displaying frames [25, 30, 35, 40, 45]&lt;/span&gt;
+&lt;span class="err"&gt;Displaying frames [25, 30, 35, 40, 45]&lt;/span&gt;
+&lt;span class="err"&gt;Displaying frames [25, 30, 35, 40, 45]&lt;/span&gt;
 &lt;/pre&gt;&lt;/div&gt;
 &lt;p&gt;&lt;img alt="png" class="img-fluid" src="ImageSequences_files/ImageSequences_18_3.png"/&gt;&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;Displaying frames [50, 55, 60, 65, 70]
-Displaying frames [50, 55, 60, 65, 70]
-Displaying frames [50, 55, 60, 65, 70]
-Displaying frames [50, 55, 60, 65, 70]
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="err"&gt;Displaying frames [50, 55, 60, 65, 70]&lt;/span&gt;
+&lt;span class="err"&gt;Displaying frames [50, 55, 60, 65, 70]&lt;/span&gt;
+&lt;span class="err"&gt;Displaying frames [50, 55, 60, 65, 70]&lt;/span&gt;
+&lt;span class="err"&gt;Displaying frames [50, 55, 60, 65, 70]&lt;/span&gt;
 &lt;/pre&gt;&lt;/div&gt;
 &lt;p&gt;&lt;img alt="png" class="img-fluid" src="ImageSequences_files/ImageSequences_18_5.png"/&gt;&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;Displaying frames [75, 80, 85, 90, 95]
-Displaying frames [75, 80, 85, 90, 95]
-Displaying frames [75, 80, 85, 90, 95]
-Displaying frames [75, 80, 85, 90, 95]
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="err"&gt;Displaying frames [75, 80, 85, 90, 95]&lt;/span&gt;
+&lt;span class="err"&gt;Displaying frames [75, 80, 85, 90, 95]&lt;/span&gt;
+&lt;span class="err"&gt;Displaying frames [75, 80, 85, 90, 95]&lt;/span&gt;
+&lt;span class="err"&gt;Displaying frames [75, 80, 85, 90, 95]&lt;/span&gt;
 &lt;/pre&gt;&lt;/div&gt;
 &lt;p&gt;&lt;img alt="png" class="img-fluid" src="ImageSequences_files/ImageSequences_18_7.png"/&gt;&lt;/p&gt;
-&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;Displaying frames [100, 105, 110, 115, 120]
-Displaying frames [100, 105, 110, 115, 120]
-Displaying frames [100, 105, 110, 115, 120]
-Displaying frames [100, 105, 110, 115, 120]
+&lt;div class="highlight"&gt;&lt;pre&gt;&lt;span&gt;&lt;/span&gt;&lt;span class="err"&gt;Displaying frames [100, 105, 110, 115, 120]&lt;/span&gt;
+&lt;span class="err"&gt;Displaying frames [100, 105, 110, 115, 120]&lt;/span&gt;
+&lt;span class="err"&gt;Displaying frames [100, 105, 110, 115, 120]&lt;/span&gt;
+&lt;span class="err"&gt;Displaying frames [100, 105, 110, 115, 120]&lt;/span&gt;
 &lt;/pre&gt;&lt;/div&gt;
 &lt;p&gt;&lt;img alt="png" class="img-fluid" src="ImageSequences_files/ImageSequences_18_9.png"/&gt;&lt;/p&gt;
 &lt;p&gt;And that's it! This formatting of the data will allow us to work with a batch of sequential images that we could use to train a recurrent neural network to learn some feature of the dataset. You can experiment yourself and change the sequence length but remember that you need to generate the TFRecords file again in order to work with the right batches. To recap the key things to take away are&lt;/p&gt;
@@ -340,11 +427,11 @@ Displaying frames [100, 105, 110, 115, 120]
 &lt;/ol&gt;
 &lt;h3&gt;Further reading&lt;/h3&gt;
 &lt;p&gt;https://medium.com/mostly-ai/tensorflow-records-what-they-are-and-how-to-use-them-c46bc4bbb564&lt;br/&gt;
-www.wildml.com/2016/08/rnns-in-tensorflow-a-practical-guide-and-undocumented-features/&lt;/p&gt;</content><category term="image sequences"></category><category term="tfrecords"></category><category term="dataset API"></category></entry><entry><title>Welcome</title><link href="https://dmolony3.github.io/Introduction.html" rel="alternate"></link><published>2018-07-09T10:01:00-04:00</published><updated>2018-07-09T12:30:00-04:00</updated><author><name>David Molony</name></author><id>tag:dmolony3.github.io,2018-07-09:/Introduction.html</id><summary type="html">&lt;p&gt;Introduction to the blog.&lt;/p&gt;</summary><content type="html">&lt;h1&gt;Introduction&lt;/h1&gt;
+www.wildml.com/2016/08/rnns-in-tensorflow-a-practical-guide-and-undocumented-features/&lt;/p&gt;</content><category term="Tensorflow"></category><category term="image sequences"></category><category term="tfrecords"></category><category term="dataset API"></category></entry><entry><title>Welcome</title><link href="https://dmolony3.github.io/Introduction.html" rel="alternate"></link><published>2018-07-09T10:01:00-04:00</published><updated>2018-07-09T12:30:00-04:00</updated><author><name>David Molony</name></author><id>tag:dmolony3.github.io,2018-07-09:/Introduction.html</id><summary type="html">&lt;p&gt;Introduction to the blog.&lt;/p&gt;</summary><content type="html">&lt;h1&gt;Introduction&lt;/h1&gt;
 &lt;p&gt;Welcome to my blog! I'm a postdoctoral fellow at Emory University 
 researching how hemodynamics influence the initiation and  progression of atherosclerosis. 
 My research journey has resulted in me finding myself at the intersection of 
 biomechanics, computer vision and data science.  &lt;/p&gt;
 &lt;p&gt;Here I will be detailing my data science experiences and offering tips
  and solutions on working with Tensorflow. My first post will deal with 
- importing sequences of images into Tensorflow using the Dataset API. Stay tuned!&lt;/p&gt;</content><category term="intro"></category></entry></feed>
+ importing sequences of images into Tensorflow using the Dataset API. Stay tuned!&lt;/p&gt;</content><category term="Home"></category><category term="intro"></category></entry></feed>

@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom"><title>David Molony - Home</title><link href="https://dmolony3.github.io/" rel="alternate"></link><link href="https://dmolony3.github.io/feeds/home.atom.xml" rel="self"></link><id>https://dmolony3.github.io/</id><updated>2018-07-09T12:30:00-04:00</updated><entry><title>Welcome</title><link href="https://dmolony3.github.io/Introduction.html" rel="alternate"></link><published>2018-07-09T10:01:00-04:00</published><updated>2018-07-09T12:30:00-04:00</updated><author><name>David Molony</name></author><id>tag:dmolony3.github.io,2018-07-09:/Introduction.html</id><summary type="html">&lt;p&gt;Introduction to the blog.&lt;/p&gt;</summary><content type="html">&lt;h1&gt;Introduction&lt;/h1&gt;
+<feed xmlns="http://www.w3.org/2005/Atom"><title>David Molony - Home</title><link href="https://dmolony3.github.io/" rel="alternate"></link><link href="https://dmolony3.github.io/feeds/home.atom.xml" rel="self"></link><id>https://dmolony3.github.io/</id><updated>2018-07-09T12:30:00-04:00</updated><subtitle>Machine Learning, Biomechanics, Medical Imaging</subtitle><entry><title>Welcome</title><link href="https://dmolony3.github.io/Introduction.html" rel="alternate"></link><published>2018-07-09T10:01:00-04:00</published><updated>2018-07-09T12:30:00-04:00</updated><author><name>David Molony</name></author><id>tag:dmolony3.github.io,2018-07-09:/Introduction.html</id><summary type="html">&lt;p&gt;Introduction to the blog.&lt;/p&gt;</summary><content type="html">&lt;h1&gt;Introduction&lt;/h1&gt;
 &lt;p&gt;Welcome to my blog! I'm a postdoctoral fellow at Emory University 
 researching how hemodynamics influence the initiation and  progression of atherosclerosis. 
 My research journey has resulted in me finding myself at the intersection of 
 biomechanics, computer vision and data science.  &lt;/p&gt;
 &lt;p&gt;Here I will be detailing my data science experiences and offering tips
  and solutions on working with Tensorflow. My first post will deal with 
- importing sequences of images into Tensorflow using the Dataset API. Stay tuned!&lt;/p&gt;</content><category term="intro"></category></entry></feed>
+ importing sequences of images into Tensorflow using the Dataset API. Stay tuned!&lt;/p&gt;</content><category term="Home"></category><category term="intro"></category></entry></feed>
