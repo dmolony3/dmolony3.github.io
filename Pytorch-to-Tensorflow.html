@@ -6,7 +6,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 
-  <title>  Porting Pytorch pretrained weights to Tensorflow | David Molony
+  <title>  Porting a pretrained ResNet from Pytorch to Tensorflow 2.0 | David Molony
 </title>
   <link rel="canonical" href="/Pytorch-to-Tensorflow.html">
 
@@ -51,7 +51,7 @@
 
   <div class="main">
     <div class="container">
-      <h1>  Porting Pytorch pretrained weights to Tensorflow
+      <h1>  Porting a pretrained ResNet from Pytorch to Tensorflow 2.0
 </h1>
       <hr>
   <article class="article">
@@ -71,8 +71,7 @@
       </ul>
     </header>
     <div class="content">
-      <h1>Porting a pretrained ResNet from Pytorch to Tensorflow 2.0</h1>
-<p>While building a <a href="https://arxiv.org/abs/2002.05709">SimCLR</a> model in Tensorflow 2.0 I decided I wanted to use a smaller model than the authors due to my GPU limits. The SimCLR paper uses a ResNet with 50 layers so I decided to use a less resource intense ResNet18 or ResNet34. To my surprise Tensorflow did not have pretrained ImageNet weights for either of these smaller models. On the other hand the torchvision library for Pytorch provides pretrained weights for all ResNets with 18, 34, 50, 101 and 152 layers. Since I already decided to use Tensorflow for this project I set out to port the model and weights from Pytorch to Tensorflow. In this post I will describe this process using tensorflow 2.0.0b1, pytorch 1.4.0 and torchvision 0.5.0.</p>
+      <p>While building a <a href="https://arxiv.org/abs/2002.05709">SimCLR</a> model in Tensorflow 2.0 I decided I wanted to use a smaller model than the authors due to my GPU limits. The SimCLR paper uses a ResNet with 50 layers so I decided to use a less resource intense ResNet18 or ResNet34. To my surprise Tensorflow did not have pretrained ImageNet weights for either of these smaller models. On the other hand the torchvision library for Pytorch provides pretrained weights for all ResNets with 18, 34, 50, 101 and 152 layers. Since I already decided to use Tensorflow for this project I set out to port the model and weights from Pytorch to Tensorflow. In this post I will describe this process using tensorflow 2.0.0b1, pytorch 1.4.0 and torchvision 0.5.0.</p>
 <h2>Pytorch model exploration</h2>
 <p>The first step is to import resnet from torchvision. We then display the model parameters <em>model.state_dict</em> which shows us the kernel_size and padding used for each layer. Then we place the names of each layer with parameters/weights in a list <em>torch_layer_names</em>.</p>
 <div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torchvision.models</span> <span class="k">as</span> <span class="nn">models</span>
@@ -88,9 +87,9 @@
     <span class="n">torch_layer_names</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
 </pre></div>
 <h2>Create ResNet in Tensorflow</h2>
-<p>With the above knowledge of the model parameters we then create the ResNet model in Tensorflow. We refer also to the original <a href="https://arxiv.org/abs/1512.03385">ResNet</a> paper to fully implement the model as our <em>torch_layer_names</em> list only contains layers with parameters so will be missing layer such as the residual connection. For each of the layers in torch_layer_names we make sure the corresponding layer in our Tensorflow model has the same name by setting the <em>name</em> argument. This is mostly straightforward except for a few cases where the padding is different between the models.</p>
-<h3>Tensorflow padding</h3>
-<p>The Pytorch model uses <strong>same</strong> padding but naively setting the padding to <strong>same</strong> in Tensorflow will not work in some layers. I did not comprehensively study the cases where it results in a different output but it seems to occur when stride&gt;1. To get around this we insert a <em>zero padding layer</em> prior to our strided layer where we now use <strong>valid</strong> padding. For example for a <em>max pool layer</em> we can do the following</p>
+<p>With the above knowledge of the model parameters we then create the ResNet model in Tensorflow. We refer also to the original <a href="https://arxiv.org/abs/1512.03385">ResNet</a> paper to fully implement the model as our <em>torch_layer_names</em> list only contains layers with parameters so will be missing layer such as the residual connection. For each of the layers in torch_layer_names we make sure the corresponding layer in our Tensorflow model has the same name by setting the <em>name</em> argument. This whole process is mostly straightforward except for a few cases where the padding is different between the models.</p>
+<h4>Tensorflow padding</h4>
+<p><strong>Same</strong> padding refers to when we want the layer output to have the same size as the input. The Pytorch model uses <strong>same</strong> padding but naively setting the padding to <strong>same</strong> in Tensorflow will not work in some layers. I did not comprehensively study the cases where it results in a different output but it seems to occur when stride&gt;1. To get around this we insert a <em>zero padding layer</em> prior to our strided layer where we now use <strong>valid</strong> padding. For example for a <em>max pool layer</em> we can do the following</p>
 <div class="highlight"><pre><span></span><span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">ZeroPadding2D</span><span class="p">(</span><span class="n">padding</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s1">'pad1'</span><span class="p">)(</span><span class="n">x</span><span class="p">)</span>
 <span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">MaxPool2D</span><span class="p">(</span><span class="n">pool_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="s1">'valid'</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">'maxpool'</span><span class="p">)(</span><span class="n">x</span><span class="p">)</span>
 </pre></div>
@@ -160,7 +159,7 @@
 </pre></div>
 <h2>Copying the Pytorch weights to Tensorflow</h2>
 <p>Now that we have a ResNet18 Tensorflow model we need to copy the pretrained weights from the Pytorch model to the Tensorflow model. </p>
-<h3>Getting Pytorch weights and setting Tensorflow weights</h3>
+<h4>Getting Pytorch weights and setting Tensorflow weights</h4>
 <p>To get weights from a Pytorch layer we can again use the state_dict which returns an ordered dictionary. We then use the layer names as the key but also append the type of weights stored in the layer. For example, to get the parameters for a <em>batch normalization layer</em>.</p>
 <div class="highlight"><pre><span></span><span class="n">layer</span><span class="o">=</span><span class="s1">'layer2.0.bn2'</span>
 <span class="n">gamma</span> <span class="o">=</span> <span class="n">resnet_torch</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="n">layer</span><span class="o">+</span><span class="s1">'.weight'</span><span class="p">]</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
@@ -242,7 +241,7 @@
 <span class="n">max_diff</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">tf_output</span> <span class="o">-</span> <span class="n">torch_output</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()))</span>
 <span class="nb">print</span><span class="p">(</span><span class="s1">'Max difference in fully connected layer :</span><span class="si">{}</span><span class="s1">'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">max_diff</span><span class="p">))</span>
 </pre></div>
-<h3>Save the Tensorflow model</h3>
+<h4>Save the Tensorflow model</h4>
 <p>We can save the Tensorflow model as follows</p>
 <div class="highlight"><pre><span></span><span class="n">model</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s1">'Resnet18'</span><span class="p">)</span>
 </pre></div>
