@@ -57,9 +57,9 @@
   <article class="article">
     <header>
       <ul class="list-inline">
-        <li class="list-inline-item text-muted" title="2020-02-18T10:10:00-05:00">
+        <li class="list-inline-item text-muted" title="2020-02-19T16:30:00-05:00">
           <i class="fa fa-clock-o"></i>
-          Tue 18 February 2020
+          Wed 19 February 2020
         </li>
         <li class="list-inline-item">
           <i class="fa fa-folder-open-o"></i>
@@ -84,7 +84,7 @@
 <p>The tensorflow projector is a nice tool that allows us to visualize high-dimensional data such as images or word vectors in 2D or 3D space. You can use either Principal Component Analysis (PCA) or t-distributed Stochastic Neighbouring Embedding (t-SNE) for this purpose. t-SNE works by converting similarities between data points to joint probabilities and then tries to minimize the KL divergence between the joint probabilities of the low-dimensional embedding and the high-dimensional data. For an awesome breakdown of t-SNE <a href="https://www.youtube.com/watch?v=NEaUSP4YerM">this</a> is a great resource. There are <a href="https://scikit-learn.org/stable/modules/generated/sklearn.manifold.TSNE.html">suggestions</a> that the dimensionality should be reduced to 50 prior to running t-SNE, in my own assessment this did not seem to have a visual impact.</p>
 <p>I generated 1,800 IVUS images using SPADE and along with 1,800 real IVUS images reduced their dimensions by performing nearest neighbour interpolation of the original 500x500 image to 64x64. The 64x64 image is flattened to a vector of dimension 4,096 and is then saved to file for each IVUS image. I also supply a metadata file which indicates whether an image is real of fake (generated). To take a look at these files and how I created the embeddings visit <a href="github.com/dmolony3/GAN_embedding">here</a>.</p>
 <h3>Results</h3>
-<p>You can run the algorithm yourself by clicking <a href="http://projector.tensorflow.org/?config=https://raw.githubusercontent.com/dmolony3/GAN_embedding/master/config.json">here</a> where you will be able to manipulate the view of 3D space. In the image below, which is taken after 1000 iterations of t-SNE, you can see that the blue (generated/fake) images and red (real) images are inseparable. This indicates that </p>
+<p>You can run the algorithm yourself by clicking <a href="http://projector.tensorflow.org/?config=https://raw.githubusercontent.com/dmolony3/GAN_embedding/master/config.json">here</a> where you will be able to manipulate the view of 3D space. In the image below, which is taken after 1000 iterations of t-SNE, you can see that the blue (generated/fake) images and red (real) images are inseparable. This suggests that - with respect to our input dimensionality - the generated images are from the same distribution as the real images.</p>
 <p align="center">
 <img alt="projector1" class="img-fluid" src="images/projector.gif"/>
 </p>
