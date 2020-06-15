@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <!-- Required meta tags -->
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+  <title>  Porting a pretrained ResNet from Pytorch to Tensorflow 2.0 | David Molony
+</title>
+  <link rel="canonical" href="/blog/Pytorch-to-Tensorflow.html">
+
+
+  <link rel="stylesheet" href="/blog/theme/css/bootstrap.min.css">
+  <link rel="stylesheet" href="/blog/theme/css/font-awesome.min.css">
+  <link rel="stylesheet" href="/blog/theme/css/pygments/emacs.min.css">
+  <link rel="stylesheet" href="/blog/theme/css/theme.css">
+
+  
+  <meta name="description" content="Explanation and demo of how to port a Pytorch models weights to Tensorflow 2.0">
+
+
+</head>
+
+<body>
+  <header class="header">
+    <div class="container">
+<div class="row">
+    <div class="col-sm-4">
+      <a href="/blog/">
+        <img class="img-fluid rounded" src=/blog/images/burma.jpg alt="David Molony">
+      </a>
+    </div>
+  <div class="col-sm-8">
+    <h1 class="title"><a href="/blog/">David Molony</a></h1>
+      <p class="text-muted">Machine Learning, Data Science, Medical Imaging</p>
+      <ul class="list-inline">
+          <li class="list-inline-item"><a href="https://scholar.google.com/citations?user=jOp2LIMAAAAJ&hl=en" target="_blank">Google scholar</a></li>
+          <li class="list-inline-item"><a href="/pdfs/David_Molony_Resume_May_2020.pdf" target="_blank">CV</a></li>
+            <li class=" list-inline-item text-muted">|</li>
+          <li class="list-inline-item"><a class="fa fa-linkedin" href="https://www.linkedin.com/in/david-molony-7457a219/" target="_blank"></a></li>
+          <li class="list-inline-item"><a class="fa fa-twitter" href="https://twitter.com/DavidSMolony" target="_blank"></a></li>
+          <li class="list-inline-item"><a class="fa fa-github" href="https://github.com/dmolony3" target="_blank"></a></li>
+          <li class="list-inline-item"><a class="fa fa-Google scholar" href="https://scholar.google.com/citations?user=jOp2LIMAAAAJ&hl=en" target="_blank"></a></li>
+      </ul>
+  </div>
+</div>    </div>
+  </header>
+
+  <div class="main">
+    <div class="container">
+      <h1>  Porting a pretrained ResNet from Pytorch to Tensorflow 2.0
+</h1>
+      <hr>
+  <article class="article">
+    <header>
+      <ul class="list-inline">
+        <li class="list-inline-item text-muted" title="2020-05-03T08:26:00-04:00">
+          <i class="fa fa-clock-o"></i>
+          Sun 03 May 2020
+        </li>
+        <li class="list-inline-item">
+          <i class="fa fa-folder-open-o"></i>
+          <a href="/blog/category/tensorflow.html">Tensorflow</a>
+        </li>
+          <li class="list-inline-item">
+            <i class="fa fa-files-o"></i>
+              <a href="/blog/tag/tensorflow.html">#Tensorflow</a>,               <a href="/blog/tag/pytorch.html">#Pytorch</a>,               <a href="/blog/tag/tensorflow-20.html">#Tensorflow 2.0</a>,               <a href="/blog/tag/resnet.html">#ResNet</a>          </li>
+      </ul>
+    </header>
+    <div class="content">
+      <p>While building a <a href="https://arxiv.org/abs/2002.05709">SimCLR</a> model in Tensorflow 2.0 I decided I wanted to use a smaller model than the authors due to my GPU limits. The SimCLR paper uses a ResNet with 50 layers so I decided to use a less resource intense ResNet18 or ResNet34. To my surprise Tensorflow did not have pretrained ImageNet weights for either of these smaller models. On the other hand the torchvision library for Pytorch provides pretrained weights for all ResNets with 18, 34, 50, 101 and 152 layers. Since I already decided to use Tensorflow for this project I set out to port the model and weights from Pytorch to Tensorflow. In this post I will describe this process using tensorflow 2.0.0b1, pytorch 1.4.0 and torchvision 0.5.0.</p>
+<h2>Pytorch model exploration</h2>
+<p>The first step is to import resnet from torchvision. We then display the model parameters <em>model.state_dict</em> which shows us the kernel_size and padding used for each layer. Then we place the names of each layer with parameters/weights in a list <em>torch_layer_names</em>.</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">torchvision.models</span> <span class="k">as</span> <span class="nn">models</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">tensorflow</span> <span class="k">as</span> <span class="nn">tf</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+
+<span class="n">resnet_torch</span> <span class="o">=</span> <span class="n">models</span><span class="o">.</span><span class="n">resnet18</span><span class="p">(</span><span class="n">pretrained</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">resnet_torch</span><span class="o">.</span><span class="n">state_dict</span>
+
+<span class="n">torch_layer_names</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">module</span> <span class="ow">in</span> <span class="n">resnet_torch</span><span class="o">.</span><span class="n">named_modules</span><span class="p">():</span>
+    <span class="n">torch_layer_names</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+</pre></div>
+<h2>Create ResNet in Tensorflow</h2>
+<p>With the above knowledge of the model parameters we then create the ResNet model in Tensorflow. We refer also to the original <a href="https://arxiv.org/abs/1512.03385">ResNet</a> paper to fully implement the model as our <em>torch_layer_names</em> list only contains layers with parameters so will be missing layer such as the residual connection. For each of the layers in torch_layer_names we make sure the corresponding layer in our Tensorflow model has the same name by setting the <em>name</em> argument. This whole process is mostly straightforward except for a few cases where the padding is different between the models.</p>
+<h4>Tensorflow padding</h4>
+<p><strong>Same</strong> padding refers to when we want the layer output to have the same size as the input. The Pytorch model uses <strong>same</strong> padding but naively setting the padding to <strong>same</strong> in Tensorflow will not work in some layers. I did not comprehensively study the cases where it results in a different output but it seems to occur when stride&gt;1. To get around this we insert a <em>zero padding layer</em> prior to our strided layer where we now use <strong>valid</strong> padding. For example for a <em>max pool layer</em> we can do the following</p>
+<div class="highlight"><pre><span></span><span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">ZeroPadding2D</span><span class="p">(</span><span class="n">padding</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s1">'pad1'</span><span class="p">)(</span><span class="n">x</span><span class="p">)</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">MaxPool2D</span><span class="p">(</span><span class="n">pool_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="s1">'valid'</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">'maxpool'</span><span class="p">)(</span><span class="n">x</span><span class="p">)</span>
+</pre></div>
+<p>or for a <em>convolutional layer</em></p>
+<div class="highlight"><pre><span></span><span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">ZeroPadding2D</span><span class="p">(</span><span class="n">padding</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s1">'pad'</span><span class="p">)(</span><span class="n">inputs</span><span class="p">)</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">Conv2D</span><span class="p">(</span><span class="n">filters</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span> <span class="n">kernel_size</span><span class="o">=</span><span class="mi">7</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="s1">'valid'</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="s1">'linear'</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">'conv1'</span><span class="p">)(</span><span class="n">x</span><span class="p">)</span>
+</pre></div>
+<p>Generating the model is straightforward from here, again in order to make things easy for ourselves we just need to take care of naming all our corresponding layers in Tensorflow with the same name as our Pytorch model. The below code generates the full ResNet model (note this model does not include bottleneck residual layers as used by the 50 layer model).</p>
+<div class="highlight"><pre><span></span><span class="k">def</span> <span class="nf">BasicBlock</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">num_channels</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">num_blocks</span><span class="p">,</span> <span class="n">skip_blocks</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+    <span class="sd">"""Basic residual block"""</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">inputs</span>
+
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_blocks</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">i</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">skip_blocks</span><span class="p">:</span>
+            <span class="n">x1</span> <span class="o">=</span> <span class="n">ConvNormRelu</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">num_channels</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">],</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span> <span class="o">+</span> <span class="s1">'.'</span><span class="o">+</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">))</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">Add</span><span class="p">()([</span><span class="n">x</span><span class="p">,</span> <span class="n">x1</span><span class="p">])</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">Activation</span><span class="p">(</span><span class="s1">'relu'</span><span class="p">)(</span><span class="n">x</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">x</span>
+
+<span class="k">def</span> <span class="nf">BasicBlockDown</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">num_channels</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+    <span class="sd">"""Residual block with strided downsampling"""</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">inputs</span>
+    <span class="n">x1</span> <span class="o">=</span> <span class="n">ConvNormRelu</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">num_channels</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="p">[</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">],</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="o">+</span><span class="s1">'.0'</span><span class="p">)</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">Conv2D</span><span class="p">(</span><span class="n">num_channels</span><span class="p">,</span> <span class="n">kernel_size</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="s1">'same'</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="s1">'linear'</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="o">+</span><span class="s1">'.0.downsample.0'</span><span class="p">)(</span><span class="n">x</span><span class="p">)</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">BatchNormalization</span><span class="p">(</span><span class="n">momentum</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">epsilon</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="o">+</span><span class="s1">'.0.downsample.1'</span><span class="p">)(</span><span class="n">x</span><span class="p">)</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">Add</span><span class="p">()([</span><span class="n">x</span><span class="p">,</span> <span class="n">x1</span><span class="p">])</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">Activation</span><span class="p">(</span><span class="s1">'relu'</span><span class="p">)(</span><span class="n">x</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">x</span>
+
+<span class="k">def</span> <span class="nf">ConvNormRelu</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">num_channels</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">strides</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+    <span class="sd">"""Layer consisting of 2 consecutive batch normalizations with 1 first relu"""</span>
+    <span class="k">if</span> <span class="n">strides</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">ZeroPadding2D</span><span class="p">(</span><span class="n">padding</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="o">+</span><span class="s1">'.pad'</span><span class="p">)(</span><span class="n">x</span><span class="p">)</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">Conv2D</span><span class="p">(</span><span class="n">num_channels</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">strides</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">padding</span><span class="o">=</span><span class="s1">'valid'</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="s1">'linear'</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="o">+</span><span class="s1">'.conv1'</span><span class="p">)(</span><span class="n">x</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">Conv2D</span><span class="p">(</span><span class="n">num_channels</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">strides</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">padding</span><span class="o">=</span><span class="s1">'same'</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="s1">'linear'</span><span class="p">,</span>  <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="o">+</span><span class="s1">'.conv1'</span><span class="p">)(</span><span class="n">x</span><span class="p">)</span>      
+    <span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">BatchNormalization</span><span class="p">(</span><span class="n">momentum</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">epsilon</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="o">+</span><span class="s1">'.bn1'</span><span class="p">)(</span><span class="n">x</span><span class="p">)</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">Activation</span><span class="p">(</span><span class="s1">'relu'</span><span class="p">)(</span><span class="n">x</span><span class="p">)</span>
+
+    <span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">Conv2D</span><span class="p">(</span><span class="n">num_channels</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">strides</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">padding</span><span class="o">=</span><span class="s1">'same'</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="s1">'linear'</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="o">+</span><span class="s1">'.conv2'</span><span class="p">)(</span><span class="n">x</span><span class="p">)</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">BatchNormalization</span><span class="p">(</span><span class="n">momentum</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">epsilon</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="o">+</span><span class="s1">'.bn2'</span><span class="p">)(</span><span class="n">x</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">x</span>
+
+<span class="k">def</span> <span class="nf">ResNet18</span><span class="p">(</span><span class="n">inputs</span><span class="p">):</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">ZeroPadding2D</span><span class="p">(</span><span class="n">padding</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s1">'pad'</span><span class="p">)(</span><span class="n">inputs</span><span class="p">)</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">Conv2D</span><span class="p">(</span><span class="n">filters</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span> <span class="n">kernel_size</span><span class="o">=</span><span class="mi">7</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="s1">'valid'</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="s1">'linear'</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">'conv1'</span><span class="p">)(</span><span class="n">x</span><span class="p">)</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">BatchNormalization</span><span class="p">(</span><span class="n">momentum</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">epsilon</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">'bn1'</span><span class="p">)(</span><span class="n">x</span><span class="p">)</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">Activation</span><span class="p">(</span><span class="s1">'relu'</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">'relu'</span><span class="p">)(</span><span class="n">x</span><span class="p">)</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">ZeroPadding2D</span><span class="p">(</span><span class="n">padding</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s1">'pad1'</span><span class="p">)(</span><span class="n">x</span><span class="p">)</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">MaxPool2D</span><span class="p">(</span><span class="n">pool_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="s1">'valid'</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">'maxpool'</span><span class="p">)(</span><span class="n">x</span><span class="p">)</span>
+
+    <span class="n">x</span> <span class="o">=</span> <span class="n">BasicBlock</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">num_channels</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span> <span class="n">kernel_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">num_blocks</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">skip_blocks</span><span class="o">=</span><span class="p">[],</span> <span class="n">name</span><span class="o">=</span><span class="s1">'layer1'</span><span class="p">)</span>
+
+    <span class="n">x</span> <span class="o">=</span> <span class="n">BasicBlockDown</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">num_channels</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span> <span class="n">kernel_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">'layer2'</span><span class="p">)</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">BasicBlock</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">num_channels</span><span class="o">=</span><span class="mi">128</span><span class="p">,</span> <span class="n">kernel_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">num_blocks</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">skip_blocks</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">name</span><span class="o">=</span><span class="s1">'layer2'</span><span class="p">)</span>
+
+    <span class="n">x</span> <span class="o">=</span> <span class="n">BasicBlockDown</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">num_channels</span><span class="o">=</span><span class="mi">256</span><span class="p">,</span> <span class="n">kernel_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">'layer3'</span><span class="p">)</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">BasicBlock</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">num_channels</span><span class="o">=</span><span class="mi">256</span><span class="p">,</span> <span class="n">kernel_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">num_blocks</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">skip_blocks</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">name</span><span class="o">=</span><span class="s1">'layer3'</span><span class="p">)</span>
+
+    <span class="n">x</span> <span class="o">=</span> <span class="n">BasicBlockDown</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">num_channels</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span> <span class="n">kernel_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">'layer4'</span><span class="p">)</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">BasicBlock</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">num_channels</span><span class="o">=</span><span class="mi">512</span><span class="p">,</span> <span class="n">kernel_size</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">num_blocks</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">skip_blocks</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">name</span><span class="o">=</span><span class="s1">'layer4'</span><span class="p">)</span>
+
+    <span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">GlobalAveragePooling2D</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s1">'avgpool'</span><span class="p">)(</span><span class="n">x</span><span class="p">)</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">layers</span><span class="o">.</span><span class="n">Dense</span><span class="p">(</span><span class="n">units</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="s1">'linear'</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">'fc'</span><span class="p">)(</span><span class="n">x</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">x</span>
+</pre></div>
+<h2>Copying the Pytorch weights to Tensorflow</h2>
+<p>Now that we have a ResNet18 Tensorflow model we need to copy the pretrained weights from the Pytorch model to the Tensorflow model. </p>
+<h4>Getting Pytorch weights and setting Tensorflow weights</h4>
+<p>To get weights from a Pytorch layer we can again use the state_dict which returns an ordered dictionary. We then use the layer names as the key but also append the type of weights stored in the layer. For example, to get the parameters for a <em>batch normalization layer</em>.</p>
+<div class="highlight"><pre><span></span><span class="n">layer</span><span class="o">=</span><span class="s1">'layer2.0.bn2'</span>
+<span class="n">gamma</span> <span class="o">=</span> <span class="n">resnet_torch</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="n">layer</span><span class="o">+</span><span class="s1">'.weight'</span><span class="p">]</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+<span class="n">beta</span> <span class="o">=</span> <span class="n">resnet_torch</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="n">layer</span><span class="o">+</span><span class="s1">'.bias'</span><span class="p">]</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+<span class="n">mean</span> <span class="o">=</span> <span class="n">resnet_torch</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="n">layer</span><span class="o">+</span><span class="s1">'.running_mean'</span><span class="p">]</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+<span class="n">var</span> <span class="o">=</span> <span class="n">resnet_torch</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="n">layer</span><span class="o">+</span><span class="s1">'.running_var'</span><span class="p">]</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+</pre></div>
+<p>To set the weights for the corresponding batch norm layer in Tensorflow we first get the appropriate layer using the <em>get_layer</em> method of the model class. We then combine all the Pytorch parameters into a list and use the <em>set_weights()</em> method to set them in the Tensorflow model.</p>
+<div class="highlight"><pre><span></span><span class="n">inputs</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">Input</span><span class="p">((</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span><span class="mi">3</span><span class="p">))</span>
+<span class="n">resnet_tf</span> <span class="o">=</span> <span class="n">ResNet18</span><span class="p">(</span><span class="n">inputs</span><span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">Model</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">resnet_tf</span><span class="p">)</span>
+<span class="n">model</span><span class="o">.</span><span class="n">get_layer</span><span class="p">(</span><span class="n">layer</span><span class="p">)</span><span class="o">.</span><span class="n">set_weights</span><span class="p">([</span><span class="n">gamma</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">mean</span><span class="p">,</span> <span class="n">var</span><span class="p">]))</span>
+</pre></div>
+<p>Since we have given the Tensorflow layers with parameters the same name as their Pytorch counterparts we can run a simple for loop over the layer names and set the layer weights for the entire model this way.</p>
+<div class="highlight"><pre><span></span><span class="n">inputs</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">Input</span><span class="p">((</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span><span class="mi">3</span><span class="p">))</span>
+<span class="n">resnet_tf</span> <span class="o">=</span> <span class="n">ResNet18</span><span class="p">(</span><span class="n">inputs</span><span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">keras</span><span class="o">.</span><span class="n">Model</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">resnet_tf</span><span class="p">)</span>
+
+<span class="n">tf_layer_names</span> <span class="o">=</span> <span class="p">[</span><span class="n">layer</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">layer</span> <span class="ow">in</span> <span class="n">model</span><span class="o">.</span><span class="n">layers</span><span class="p">]</span>
+<span class="n">tf_layer_names</span> <span class="o">=</span> <span class="p">[</span><span class="n">layer</span> <span class="k">for</span> <span class="n">layer</span> <span class="ow">in</span> <span class="n">tf_layer_names</span> <span class="k">if</span> <span class="n">layer</span> <span class="ow">in</span> <span class="n">torch_layer_names</span><span class="p">]</span>
+
+<span class="k">for</span> <span class="n">layer</span> <span class="ow">in</span> <span class="n">tf_layer_names</span><span class="p">:</span>
+    <span class="k">if</span> <span class="s1">'conv'</span> <span class="ow">in</span> <span class="n">layer</span><span class="p">:</span>
+        <span class="n">tf_conv</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">get_layer</span><span class="p">(</span><span class="n">layer</span><span class="p">)</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="n">resnet_torch</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="n">layer</span><span class="o">+</span><span class="s1">'.weight'</span><span class="p">]</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+        <span class="n">weights_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">weights</span><span class="o">.</span><span class="n">transpose</span><span class="p">((</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">))]</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">tf_conv</span><span class="o">.</span><span class="n">weights</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">bias</span> <span class="o">=</span> <span class="n">resnet_torch</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="n">layer</span><span class="o">+</span><span class="s1">'.bias'</span><span class="p">]</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+            <span class="n">weights_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">bias</span><span class="p">)</span>
+        <span class="n">tf_conv</span><span class="o">.</span><span class="n">set_weights</span><span class="p">(</span><span class="n">weights_list</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="s1">'bn'</span> <span class="ow">in</span> <span class="n">layer</span><span class="p">:</span>
+        <span class="n">tf_bn</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">get_layer</span><span class="p">(</span><span class="n">layer</span><span class="p">)</span>
+        <span class="n">gamma</span> <span class="o">=</span> <span class="n">resnet_torch</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="n">layer</span><span class="o">+</span><span class="s1">'.weight'</span><span class="p">]</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+        <span class="n">beta</span> <span class="o">=</span> <span class="n">resnet_torch</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="n">layer</span><span class="o">+</span><span class="s1">'.bias'</span><span class="p">]</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+        <span class="n">mean</span> <span class="o">=</span> <span class="n">resnet_torch</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="n">layer</span><span class="o">+</span><span class="s1">'.running_mean'</span><span class="p">]</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+        <span class="n">var</span> <span class="o">=</span> <span class="n">resnet_torch</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="n">layer</span><span class="o">+</span><span class="s1">'.running_var'</span><span class="p">]</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+        <span class="n">bn_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">gamma</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">mean</span><span class="p">,</span> <span class="n">var</span><span class="p">]</span>
+        <span class="n">tf_bn</span><span class="o">.</span><span class="n">set_weights</span><span class="p">(</span><span class="n">bn_list</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="s1">'downsample.0'</span> <span class="ow">in</span> <span class="n">layer</span><span class="p">:</span>
+        <span class="n">tf_downsample</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">get_layer</span><span class="p">(</span><span class="n">layer</span><span class="p">)</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="n">resnet_torch</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="n">layer</span><span class="o">+</span><span class="s1">'.weight'</span><span class="p">]</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+        <span class="n">weights_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">weights</span><span class="o">.</span><span class="n">transpose</span><span class="p">((</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">))]</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">tf_downsample</span><span class="o">.</span><span class="n">weights</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">bias</span> <span class="o">=</span> <span class="n">resnet_torch</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="n">layer</span><span class="o">+</span><span class="s1">'.bias'</span><span class="p">]</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+            <span class="n">weights_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">bias</span><span class="p">)</span>
+        <span class="n">tf_downsample</span><span class="o">.</span><span class="n">set_weights</span><span class="p">(</span><span class="n">weights_list</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="s1">'downsample.1'</span> <span class="ow">in</span> <span class="n">layer</span><span class="p">:</span>
+        <span class="n">tf_downsample</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">get_layer</span><span class="p">(</span><span class="n">layer</span><span class="p">)</span>
+        <span class="n">gamma</span> <span class="o">=</span> <span class="n">resnet_torch</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="n">layer</span><span class="o">+</span><span class="s1">'.weight'</span><span class="p">]</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+        <span class="n">beta</span> <span class="o">=</span> <span class="n">resnet_torch</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="n">layer</span><span class="o">+</span><span class="s1">'.bias'</span><span class="p">]</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+        <span class="n">mean</span> <span class="o">=</span> <span class="n">resnet_torch</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="n">layer</span><span class="o">+</span><span class="s1">'.running_mean'</span><span class="p">]</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+        <span class="n">var</span> <span class="o">=</span> <span class="n">resnet_torch</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="n">layer</span><span class="o">+</span><span class="s1">'.running_var'</span><span class="p">]</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+        <span class="n">bn_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">gamma</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">mean</span><span class="p">,</span> <span class="n">var</span><span class="p">]</span> <span class="c1"># [gamma, beta, mean, var]</span>
+        <span class="n">tf_downsample</span><span class="o">.</span><span class="n">set_weights</span><span class="p">(</span><span class="n">bn_list</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="s1">'fc'</span> <span class="ow">in</span> <span class="n">layer</span><span class="p">:</span>
+        <span class="n">tf_fc</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">get_layer</span><span class="p">(</span><span class="n">layer</span><span class="p">)</span>
+        <span class="n">weights</span> <span class="o">=</span> <span class="n">resnet_torch</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="n">layer</span><span class="o">+</span><span class="s1">'.weight'</span><span class="p">]</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span> 
+        <span class="n">weights_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">weights</span><span class="o">.</span><span class="n">transpose</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">))]</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">tf_fc</span><span class="o">.</span><span class="n">weights</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">bias</span> <span class="o">=</span> <span class="n">resnet_torch</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()[</span><span class="n">layer</span><span class="o">+</span><span class="s1">'.bias'</span><span class="p">]</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+            <span class="n">weights_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">bias</span><span class="p">)</span>
+        <span class="n">tf_fc</span><span class="o">.</span><span class="n">set_weights</span><span class="p">(</span><span class="n">weights_list</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s1">'No parameters found for </span><span class="si">{}</span><span class="s1">'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">layer</span><span class="p">))</span>
+</pre></div>
+<h2>Comparing the model output</h2>
+<p>The final step is to check that the output from Tensorflow matches that of Pytorch. Let's download an image of a cat and feed it into both models. We will see the max difference in the logits values is very small indicating that the models should be equivalent.</p>
+<div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">requests</span><span class="o">,</span> <span class="nn">shutil</span><span class="o">,</span> <span class="nn">PIL</span>
+<span class="n">image_url</span> <span class="o">=</span> <span class="s2">"https://upload.wikimedia.org/wikipedia/commons/thumb/9/97/Kot_z_mysz%C4%85.jpg/480px-Kot_z_mysz%C4%85.jpg"</span>
+<span class="n">resp</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">image_url</span><span class="p">,</span> <span class="n">stream</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">local_file</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="s1">'cat.jpg'</span><span class="p">,</span> <span class="s1">'wb'</span><span class="p">)</span>
+<span class="n">shutil</span><span class="o">.</span><span class="n">copyfileobj</span><span class="p">(</span><span class="n">resp</span><span class="o">.</span><span class="n">raw</span><span class="p">,</span> <span class="n">local_file</span><span class="p">)</span>
+<span class="n">img</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">PIL</span><span class="o">.</span><span class="n">Image</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="s1">'cat.jpg'</span><span class="p">,</span> <span class="s1">'r'</span><span class="p">)),</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+<span class="n">img_torch</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">img</span><span class="o">.</span><span class="n">transpose</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)))</span>
+<span class="n">tf_output</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
+<span class="n">resnet_torch</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
+<span class="n">torch_output</span> <span class="o">=</span> <span class="n">resnet_torch</span><span class="p">(</span><span class="n">img_torch</span><span class="p">)</span>
+
+<span class="n">max_diff</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">tf_output</span> <span class="o">-</span> <span class="n">torch_output</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s1">'Max difference in fully connected layer :</span><span class="si">{}</span><span class="s1">'</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">max_diff</span><span class="p">))</span>
+</pre></div>
+<h4>Save the Tensorflow model</h4>
+<p>We can save the Tensorflow model as follows</p>
+<div class="highlight"><pre><span></span><span class="n">model</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="s1">'Resnet18'</span><span class="p">)</span>
+</pre></div>
+<h2>Conclusion</h2>
+<p>Hopefully this post wil be useful to someone if they need to use Resnet18 or ResNet34 for Tensorflow or decide to port another Pytorch model to Tensorflow. The code above should work out of the box or refer to my <a href="https://github.com/dmolony3/Torch_to_TF">github</a>.</p><script src="//platform.twitter.com/widgets.js" charset="utf-8"></script>
+    </div>
+  </article>
+  <hr>
+  <div id="disqus_thread"></div>
+  <script>
+    var disqus_config = function() {
+      this.page.url = '/blog/Pytorch-to-Tensorflow.html';
+      this.page.identifier = 'Pytorch-to-Tensorflow';
+    };
+    (function() {
+      var d = document;
+      var s = d.createElement('script');
+      s.src = '//dmolony3.disqus.com/embed.js';
+      s.setAttribute('data-timestamp', +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  </script>
+  <noscript class="text-muted">
+    Please enable JavaScript to view the <a href="https://disqus.com/?ref_noscript" rel="nofollow">comments powered by Disqus.</a>
+  </noscript>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div class="container">
+<div class="row">
+  <ul class="col-sm-6 list-inline">
+    <li class="list-inline-item"><a href="/blog/archives.html">Archives</a></li>
+    <li class="list-inline-item"><a href="/blog/categories.html">Categories</a></li>
+      <li class="list-inline-item"><a href="/blog/tags.html">Tags</a></li>
+  </ul>
+  <p class="col-sm-6 text-sm-right text-muted">
+    Generated by <a href="https://github.com/getpelican/pelican" target="_blank">Pelican</a>
+    / <a href="https://github.com/nairobilug/pelican-alchemy" target="_blank">&#x2728;</a>
+  </p>
+</div>    </div>
+  </footer>
+</body>
+
+</html>
